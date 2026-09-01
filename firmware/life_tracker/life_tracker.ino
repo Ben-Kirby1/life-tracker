@@ -6,10 +6,9 @@
 
 // ─── WiFi Configuration ──────────────────────────────────────────────────
 // Set these to your home WiFi and the IP of the computer running the Flask server
-const char* WIFI_SSID = "your_wifi_name";
+const char* WIFI_SSID = "5G University House Midtown";
 const char* WIFI_PASS = "your_wifi_password";
-const char* SERVER_HOST = "192.168.1.100";  // change to your server's IP
-const int   SERVER_PORT = 5000;
+const char* SERVER_HOST = "life-tracker-server-ipri.onrender.com";  // HTTPS, no port needed
 
 // ─── Task Data ───────────────────────────────────────────────────────────
 #define MAX_TASKS 10
@@ -154,7 +153,9 @@ void fetchTasks() {
   if (WiFi.status() != WL_CONNECTED) return;
 
   HTTPClient http;
-  String url = String("http://") + SERVER_HOST + ":" + SERVER_PORT + "/api/tasks";
+  // For Render (cloud): use HTTPS, no port
+  String url = String("https://") + SERVER_HOST + "/api/tasks";
+  #pragma message "Using HTTPS connection for Render"
 
   http.begin(url);
   http.setTimeout(5000);
@@ -193,7 +194,8 @@ void toggleTask(int id) {
   if (WiFi.status() != WL_CONNECTED) return;
 
   HTTPClient http;
-  String url = String("http://") + SERVER_HOST + ":" + SERVER_PORT + "/api/tasks/" + id + "/toggle";
+  // For Render (cloud): use HTTPS, no port
+  String url = String("https://") + SERVER_HOST + "/api/tasks/" + id + "/toggle";
 
   http.begin(url);
   http.setTimeout(5000);
@@ -228,7 +230,7 @@ void drawScreen() {
     M5.Lcd.setCursor(10, 40);
     M5.Lcd.println("Add tasks on your phone:");
     M5.Lcd.setCursor(10, 52);
-    M5.Lcd.printf("http://%s:%d", SERVER_HOST, SERVER_PORT);
+    M5.Lcd.printf("https://%s", SERVER_HOST);
   }
 
   for (int i = scrollOffset; i < taskCount && i < scrollOffset + visible; i++) {
