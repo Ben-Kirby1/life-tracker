@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StickS3 UI Styles</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, sans-serif; background: #1a1a2e; color: #eee; padding: 30px; }
+  h1 { text-align: center; margin-bottom: 10px; color: #fff; font-size: 1.5em; }
+  .subtitle { text-align: center; color: #888; margin-bottom: 30px; font-size: 0.9em; }
+  .grid { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center; }
+  .card { background: #16213e; border-radius: 12px; padding: 20px; width: 300px; }
+  .card h2 { font-size: 1em; margin-bottom: 5px; color: #0f3460; }
+  .card .source { font-size: 0.75em; color: #666; margin-bottom: 12px; }
+  .screen { width: 240px; height: 135px; border-radius: 8px; margin: 0 auto; position: relative; overflow: hidden; border: 2px solid #333; }
+  
+  /* Style A: Apple Watch inspired */
+  .screen.a { background: #000; }
+  .screen.a .status-bar { display: flex; justify-content: space-between; padding: 4px 8px; font-size: 7px; color: #fff; }
+  .screen.a .time { text-align: center; margin-top: 8px; font-size: 18px; font-weight: 600; color: #fff; letter-spacing: 1px; }
+  .screen.a .date { text-align: center; font-size: 7px; color: #888; margin-bottom: 6px; }
+  .screen.a .tasks { padding: 0 10px; }
+  .screen.a .task { display: flex; align-items: center; gap: 5px; padding: 3px 0; font-size: 8px; color: #ccc; border-bottom: 0.5px solid #222; }
+  .screen.a .task .dot { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #555; flex-shrink: 0; }
+  .screen.a .task.done .dot { background: #34c759; border-color: #34c759; }
+  .screen.a .task.done span { text-decoration: line-through; color: #555; }
+  .screen.a .task:last-child { border: none; }
+
+  /* Style B: Cardputer terminal / widget */
+  .screen.b { background: #1a1a2e; display: flex; flex-direction: column; }
+  .screen.b .header { background: #0f3460; padding: 4px 8px; display: flex; justify-content: space-between; font-size: 7px; color: #e94560; font-weight: 600; }
+  .screen.b .body { padding: 6px 8px; flex: 1; }
+  .screen.b .widget { background: #16213e; border-radius: 4px; padding: 4px 6px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+  .screen.b .widget .label { font-size: 6px; color: #888; }
+  .screen.b .widget .value { font-size: 8px; color: #0f3460; font-weight: 600; }
+  .screen.b .task-row { display: flex; align-items: center; gap: 4px; padding: 2px 0; font-size: 7px; color: #ccc; }
+  .screen.b .task-row .box { width: 8px; height: 8px; border: 1px solid #555; border-radius: 2px; flex-shrink: 0; }
+  .screen.b .task-row.done .box { background: #e94560; border-color: #e94560; }
+  .screen.b .footer { background: #0f3460; padding: 3px 8px; font-size: 6px; color: #888; text-align: center; }
+
+  /* Style C: Minimalist text */
+  .screen.c { background: #0d0d0d; padding: 10px; font-family: 'Courier New', monospace; }
+  .screen.c .title { font-size: 14px; color: #00ff41; font-weight: bold; margin-bottom: 6px; }
+  .screen.c .task { font-size: 9px; color: #888; padding: 2px 0; display: flex; gap: 6px; }
+  .screen.c .task .check { color: #00ff41; }
+  .screen.c .task .uncheck { color: #333; }
+  .screen.c .task.done span { color: #444; }
+  .screen.c .task.active { color: #fff; }
+  .screen.c .task.active .uncheck { color: #00ff41; }
+  .screen.c .progress { margin-top: 6px; font-size: 7px; color: #555; }
+  .screen.c .progress .bar { width: 100%; height: 4px; background: #1a1a1a; border-radius: 2px; margin-top: 2px; }
+  .screen.c .progress .bar .fill { height: 100%; background: #00ff41; width: 40%; border-radius: 2px; }
+  .screen.c .bat { margin-top: 4px; font-size: 6px; color: #333; }
+
+  /* Style D: Cardputer / Launcher style */
+  .screen.d { background: #2d1b69; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 0; }
+  .screen.d .icon { width: 48px; height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .screen.d .icon .circle { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 12px; }
+  .screen.d .icon .label { font-size: 5px; color: rgba(255,255,255,0.6); margin-top: 2px; }
+  .screen.d .top-bar { width: 100%; display: flex; justify-content: space-between; padding: 4px 8px; font-size: 7px; color: rgba(255,255,255,0.8); }
+
+  .label { font-size: 0.75em; color: #aaa; text-align: center; margin-top: 8px; }
+  .tags { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; margin-top: 6px; }
+  .tag { background: #0f3460; color: #888; padding: 2px 8px; border-radius: 4px; font-size: 0.65em; }
+</style>
+</head>
+<body>
+<h1>M5StickS3 UI Styles</h1>
+<p class="subtitle">135×240 display — 1.14" — choose your direction</p>
+
+<div class="grid">
+
+  <div class="card">
+    <h2>🎯 A. Apple Watch / Minimal</h2>
+    <p class="source">Common in LVGL watch faces, SquareLine Studio templates</p>
+    <div class="screen a">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span>🔋 72%</span>
+      </div>
+      <div class="time">12:30</div>
+      <div class="date">Monday, Aug 31</div>
+      <div class="tasks">
+        <div class="task done"><div class="dot"></div><span>✏️ ROS2 lesson 3</span></div>
+        <div class="task"><div class="dot"></div><span>📐 CAD buoy hull</span></div>
+        <div class="task"><div class="dot"></div><span>🤖 MATE ROV mtg</span></div>
+        <div class="task"><div class="dot"></div><span>📦 Buy sensors</span></div>
+      </div>
+    </div>
+    <div class="label">Rounded dots, thin lines, dark bg, clean sans-serif</div>
+    <div class="tags"><span class="tag">LVGL</span><span class="tag">SquareLine</span><span class="tag">M5GFX</span></div>
+  </div>
+
+  <div class="card">
+    <h2>📊 B. Dashboard / Widget</h2>
+    <p class="source">Similar to the Reddit task-tracker dashboard, Cardputer launcher style</p>
+    <div class="screen b">
+      <div class="header"><span>📋 TRACKER</span><span>72%</span></div>
+      <div class="body">
+        <div class="widget">
+          <span class="label">Tasks</span>
+          <span class="value">3/6 done</span>
+        </div>
+        <div class="task-row done"><div class="box"></div><span>ROS2 lesson 3</span></div>
+        <div class="task-row" style="background:#0f3460;border-radius:2px;padding:2px 4px;margin:0 -2px"><div class="box"></div><span>CAD buoy hull</span></div>
+        <div class="task-row"><div class="box"></div><span>MATE ROV mtg</span></div>
+        <div class="task-row"><div class="box"></div><span>Buy sensors</span></div>
+      </div>
+      <div class="footer">Scroll: A · Toggle: B · Hold A: Del</div>
+    </div>
+    <div class="label">Widget panels, color-coded, compact data density</div>
+    <div class="tags"><span class="tag">M5GFX</span><span class="tag">Dashboard</span></div>
+  </div>
+
+  <div class="card">
+    <h2>💻 C. Terminal / Cyber</h2>
+    <p class="source">Hacker/terminal aesthetic, green-on-black, common in firmware projects</p>
+    <div class="screen c">
+      <div class="title">$ tracker</div>
+      <div class="task done"><span class="check">✓</span><span>ROS2 lesson 3</span></div>
+      <div class="task active"><span class="uncheck">▸</span><span>CAD buoy hull</span></div>
+      <div class="task"><span class="uncheck">○</span><span>MATE ROV mtg</span></div>
+      <div class="task"><span class="uncheck">○</span><span>Buy sensors</span></div>
+      <div class="progress">
+        <span>3/6 complete</span>
+        <div class="bar"><div class="fill"></div></div>
+      </div>
+      <div class="bat">🔋 72% — 3.97V</div>
+    </div>
+    <div class="label">Monospace, green phosphor, progress bar, no frills</div>
+    <div class="tags"><span class="tag">M5GFX</span><span class="tag">Monospace</span></div>
+  </div>
+
+  <div class="card">
+    <h2>📱 D. Launcher / App Grid</h2>
+    <p class="source">Launcher firmware, M5Burner style, app icon grid</p>
+    <div class="screen d">
+      <div class="top-bar"><span>📶</span><span>LIFE TRACKER</span><span>🔋</span></div>
+      <div class="icon"><div class="circle">📋</div><span class="label">Tasks</span></div>
+      <div class="icon"><div class="circle">⏱</div><span class="label">Timer</span></div>
+      <div class="icon"><div class="circle">📊</div><span class="label">Stats</span></div>
+      <div class="icon"><div class="circle">⚙️</div><span class="label">Settings</span></div>
+      <div class="icon" style="opacity:0.3"><div class="circle">🎯</div><span class="label">Habits</span></div>
+      <div class="icon" style="opacity:0.3"><div class="circle">☁️</div><span class="label">Sync</span></div>
+    </div>
+    <div class="label">Icon grid, app-launcher feel, future feature expansion</div>
+    <div class="tags"><span class="tag">M5GFX</span><span class="tag">Grid</span></div>
+  </div>
+
+</div>
+
+<div style="max-width: 960px; margin: 40px auto 0; padding: 20px; background: #16213e; border-radius: 12px;">
+  <h2 style="font-size: 1em; margin-bottom: 10px; color: #e94560;">Which style resonates?</h2>
+  <p style="font-size: 0.85em; color: #aaa; line-height: 1.6;">
+    <strong>A</strong> — Clean, modern, Apple Watch vibes. Best for glanceability. <br>
+    <strong>B</strong> — Info-dense dashboard. Widget panels. Most functional.<br>
+    <strong>C</strong> — Terminal aesthetic. Retro. Fun but maybe less "professional".<br>
+    <strong>D</strong> — Launcher grid. Future-proof if you want multiple modes (tasks, timer, habits).<br><br>
+    <em>We can also mix elements — e.g. A's time header with B's widget layout.</em>
+  </p>
+</div>
+</body>
+</html>
