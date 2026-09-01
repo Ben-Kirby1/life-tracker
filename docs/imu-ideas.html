@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IMU Use Cases — Life Tracker</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, sans-serif; background: #1a1a2e; color: #eee; padding: 30px; max-width: 700px; margin: auto; }
+  h1 { margin-bottom: 5px; }
+  .subtitle { color: #888; margin-bottom: 25px; font-size: 0.9em; }
+  .card { background: #16213e; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  .card h2 { font-size: 1.1em; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .card .tag { background: #0f3460; color: #e94560; padding: 2px 8px; border-radius: 4px; font-size: 0.7em; }
+  .card .tag.green { background: #0f3460; color: #07e0; }
+  .card .desc { color: #aaa; font-size: 0.85em; line-height: 1.5; margin-bottom: 10px; }
+  .card .code { background: #0d0d0d; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 0.75em; color: #00ff41; white-space: pre-wrap; margin-bottom: 10px; }
+  .card .pros { display: flex; gap: 6px; flex-wrap: wrap; }
+  .card .pros span { background: #1a3a2e; color: #4caf50; padding: 2px 8px; border-radius: 4px; font-size: 0.7em; }
+  .card .cons span { background: #3a1a1a; color: #f44336; padding: 2px 8px; border-radius: 4px; font-size: 0.7em; }
+  .difficulty { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 0.75em; }
+  .easy { background: #1a3a2e; color: #4caf50; }
+  .medium { background: #3a3a1a; color: #ff9800; }
+  .hard { background: #3a1a1a; color: #f44336; }
+  hr { border: none; border-top: 1px solid #333; margin: 20px 0; }
+</style>
+</head>
+<body>
+<h1>🧠 IMU Brainstorm — M5StickS3</h1>
+<p class="subtitle">BMI270 6-axis accelerometer + gyroscope — what can we do with it?</p>
+
+<div class="card">
+  <h2>👆 Tap Detection <span class="tag">Easy</span></h2>
+  <div class="desc">
+    Double-tap the StickS3 body to toggle the current task. No need to find the tiny button.
+    The accelerometer detects the sudden vibration spike from a tap.
+  </div>
+  <div class="code">// Simple tap detection: monitor acceleration magnitude
+M5.Imu.update();
+float ax, ay, az;
+M5.Imu.getAccel(&ax, &ay, &az);
+float mag = sqrt(ax*ax + ay*ay + az*az);
+
+// If magnitude spikes above ~2.5G, count as a tap
+// Two taps within 500ms = toggle current task</div>
+  <div class="pros"><span>Instant toggle</span><span>No button hunting</span><span>Feels premium</span></div>
+</div>
+
+<div class="card">
+  <h2>👋 Pick-up Wake <span class="tag">Easy</span></h2>
+  <div class="desc">
+    Screen off when sitting on the desk. Pick it up — screen turns on immediately.
+    Uses gyro to detect rotation and accelerometer to detect motion, similar to how smartwatches work.
+  </div>
+  <div class="code">// Detect pick-up: watch for acceleration change > 0.5G
+// Combined with gyro rotation change = wake screen
+// Screen stays on for 10 seconds, then dims again</div>
+  <div class="pros"><span>Battery saving</span><span>Always ready</span></div>
+</div>
+
+<div class="card">
+  <h2>📊 Step Counter <span class="tag">Medium</span></h2>
+  <div class="desc">
+    Track daily steps using the accelerometer. Show step count on the progress bar
+    (e.g., steps alongside tasks). Wrist/desk-worn pedometer.
+  </div>
+  <div class="code">// Step detection: look for peak in acceleration during walking gait
+// Typical step: 0.5-2.0G spike at ~1-2 Hz
+// Count steps, store in RTC-backed memory, reset daily</div>
+  <div class="pros"><span>Health tracking</span><span>Unique feature</span></div>
+</div>
+
+<div class="card">
+  <h2>📱 Orientation Switch <span class="tag">Easy</span></h2>
+  <div class="desc">
+    Hold the StickS3 vertically for task list, rotate horizontally for a different view
+    (e.g., stats or weekly summary). Auto-flip the screen based on orientation.
+  </div>
+  <div class="code">M5.Imu.update();
+// If Z-axis gravity > 0.7G → device is flat on desk → show task list
+// If X-axis gravity > 0.7G → device is rotated → show stats view</div>
+  <div class="pros"><span>Two views</span><span>No extra button</span></div>
+</div>
+
+<div class="card">
+  <h2>🥤 Shake to Clear <span class="tag">Medium</span></h2>
+  <div class="desc">
+    Shake the device to delete all completed tasks at once. Aggressive shake
+    (>3G multiple times in 1 second) triggers a cleanup.
+  </div>
+  <div class="code">// Detect shake: count acceleration peaks > 3G
+// If 3+ peaks in 1 second = shake detected
+// Confirm with "Shake to clear done tasks?" on screen</div>
+  <div class="pros"><span>Satisfying</span><span>Quick cleanup</span></div>
+</div>
+
+<div class="card">
+  <h2>🔔 Desk Notification <span class="tag">Medium</span></h2>
+  <div class="desc">
+    When a task is overdue or the device has been idle for a while, it can
+    vibrate or tap the desk. The IMU can detect if someone is sitting at the desk
+    (tiny vibrations from typing/footsteps) and only notify when relevant.
+  </div>
+  <div class="pros"><span>Context-aware</span><span>Less annoying</span></div>
+</div>
+
+<hr>
+
+<h2 style="margin-bottom: 15px;">📋 Suggested V2 IMU Priority</h2>
+
+<table style="width:100%; border-collapse: collapse; font-size: 0.85em;">
+  <tr style="border-bottom: 1px solid #333;">
+    <th style="text-align: left; padding: 8px;">#</th>
+    <th style="text-align: left; padding: 8px;">Feature</th>
+    <th style="text-align: left; padding: 8px;">Difficulty</th>
+    <th style="text-align: left; padding: 8px;">Why</th>
+  </tr>
+  <tr style="border-bottom: 1px solid #222;">
+    <td style="padding: 8px;">1</td>
+    <td style="padding: 8px;"><strong>Tap to toggle</strong></td>
+    <td style="padding: 8px;"><span class="difficulty easy">Easy</span></td>
+    <td style="padding: 8px; color: #aaa;">Biggest UX win for smallest effort</td>
+  </tr>
+  <tr style="border-bottom: 1px solid #222;">
+    <td style="padding: 8px;">2</td>
+    <td style="padding: 8px;"><strong>Pick-up wake</strong></td>
+    <td style="padding: 8px;"><span class="difficulty easy">Easy</span></td>
+    <td style="padding: 8px; color: #aaa;">Saves battery, feels premium</td>
+  </tr>
+  <tr style="border-bottom: 1px solid #222;">
+    <td style="padding: 8px;">3</td>
+    <td style="padding: 8px;"><strong>Orientation views</strong></td>
+    <td style="padding: 8px;"><span class="difficulty easy">Easy</span></td>
+    <td style="padding: 8px; color: #aaa;">Task list vs stats toggle</td>
+  </tr>
+  <tr style="border-bottom: 1px solid #222;">
+    <td style="padding: 8px;">4</td>
+    <td style="padding: 8px;"><strong>Step counter</strong></td>
+    <td style="padding: 8px;"><span class="difficulty medium">Medium</span></td>
+    <td style="padding: 8px; color: #aaa;">Fun, but needs calibration</td>
+  </tr>
+  <tr>
+    <td style="padding: 8px;">5</td>
+    <td style="padding: 8px;"><strong>Shake to clear</strong></td>
+    <td style="padding: 8px;"><span class="difficulty medium">Medium</span></td>
+    <td style="padding: 8px; color: #aaa;">Cool but needs confirm dialog</td>
+  </tr>
+</table>
+</body>
+</html>

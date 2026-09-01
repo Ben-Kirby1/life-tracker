@@ -31,18 +31,12 @@ int currentIndex = 0;
 int scrollOffset = 0;
 bool wifiConnected = false;
 
-// Deferred HTTP (keeps button presses instant)
 enum PendingAction { NONE, PENDING_TOGGLE, PENDING_DELETE };
 PendingAction pendingAction = NONE;
 int pendingId = 0;
 
 // ══════════════════════════════════════════════════════════════════════════
-//  SCREEN LAYOUT  (240 × 135 landscape)
-//  Row 0-16   Status bar + divider
-//  Row 18-30  "Today" header
-//  Row 40-91  Task list (3 rows × 17px)
-//  Row 96-104 Progress bar
-//  Row 110+   Progress text
+//  SCREEN LAYOUT
 // ══════════════════════════════════════════════════════════════════════════
 
 #define HEADER_Y       18
@@ -51,15 +45,37 @@ int pendingId = 0;
 #define PROGRESS_BAR_Y 96
 #define VISIBLE_TASKS  3
 
-// ══════════════════════════════════════════════════════════════════════════
-//  COLORS
-// ══════════════════════════════════════════════════════════════════════════
-
+// ─── Colors ──────────────────────────────────────────────────────────────
 #define BG_COLOR       TFT_BLACK
 #define GREEN          0x07E0
 #define GRAY           0x8410
 #define DIM            0x4208
 #define DIVIDER_COLOR  0x2104
+
+// ══════════════════════════════════════════════════════════════════════════
+//  IMU STATE
+// ══════════════════════════════════════════════════════════════════════════
+
+// Screen modes
+enum ScreenMode { MODE_TASKS, MODE_STATS };
+ScreenMode screenMode = MODE_TASKS;
+bool modeChanged = false;
+
+// Pick-up wake
+bool screenAwake = true;
+unsigned long lastMotionTime = 0;
+const unsigned long SLEEP_TIMEOUT = 10000;  // 10s of stillness = sleep
+
+// Shake to clear
+bool shakeConfirmPending = false;
+unsigned long shakeConfirmStart = 0;
+const unsigned long SHAKE_CONFIRM_TIMEOUT = 3000;
+
+// IMU calibration
+float stillThreshold = 0.15;    // G - below this = still
+float pickUpThreshold = 0.5;    // G - above this = being picked up
+float shakeThreshold = 2.8;     // G - above this = shake peak
+float orientationThreshold = 0.6; // G - above this = gravity in that axis
 
 // ══════════════════════════════════════════════════════════════════════════
 //  SETUP
@@ -80,6 +96,9 @@ void setup() {
   }
   M5.Power.setExtOutput(false);
   M5.Lcd.setBrightness(10);
+
+  // Init IMU
+  M5.Imu.begin();
 
   // Connect WiFi
   showSplash();
@@ -116,22 +135,117 @@ void showSplash() {
 void loop() {
   M5.update();
 
-  // ── Button A ──────────────────────────────────────────────────────────
-  if (M5.BtnA.wasPressed()) {
-    if (currentIndex < taskCount - 1) {
-      currentIndex++;
-      if (currentIndex - scrollOffset >= VISIBLE_TASKS) {
-        scrollOffset = currentIndex - VISIBLE_TASKS + 1;
-      }
-    } else {
-      currentIndex = 0;
-      scrollOffset = 0;
+  // ── Read IMU ──────────────────────────────────────────────────────────
+  M5.Imu.update();
+  float ax, ay, az;
+  M5.Imu.getAccel(&ax, &ay, &az);
+  float mag = sqrt(ax*ax + ay*ay + az*az);  // total acceleration magnitude
+
+  // ── Pick-up Wake ──────────────────────────────────────────────────────
+  bool isStill = (mag > 1.0 - stillThreshold && mag < 1.0 + stillThreshold);
+
+  if (isStill) {
+    // Device is sitting still — track how long
+    if (screenAwake && millis() - lastMotionTime > SLEEP_TIMEOUT) {
+      screenAwake = false;
+      M5.Lcd.fillScreen(BG_COLOR);  // turn off display
+      M5.Lcd.setBrightness(0);
     }
+  } else {
+    // Device is moving
+    lastMotionTime = millis();
+    if (!screenAwake) {
+      screenAwake = true;
+      M5.Lcd.setBrightness(10);
+      drawScreen();
+    }
+  }
+
+  // Don't process anything else if screen is asleep
+  if (!screenAwake) {
+    delay(100);
+    return;
+  }
+
+  // ── Orientation View ──────────────────────────────────────────────────
+  ScreenMode newMode = MODE_TASKS;
+  if (fabs(ax) > fabs(ay) && fabs(ax) > fabs(az)) {
+    // Gravity is mostly on X axis — device is rotated sideways
+    newMode = MODE_STATS;
+  } else {
+    newMode = MODE_TASKS;
+  }
+  if (newMode != screenMode) {
+    screenMode = newMode;
+    modeChanged = true;
+  }
+
+  // ── Shake Detection ───────────────────────────────────────────────────
+  static unsigned long lastShakePeak = 0;
+  static int shakePeakCount = 0;
+  static unsigned long shakeWindowStart = 0;
+
+  if (mag > shakeThreshold) {
+    unsigned long now = millis();
+    if (now - shakeWindowStart > 1000) {
+      // Reset window
+      shakePeakCount = 0;
+      shakeWindowStart = now;
+    }
+    if (now - lastShakePeak > 100) {  // debounce peaks
+      shakePeakCount++;
+      lastShakePeak = now;
+    }
+  }
+
+  // If 3 peaks in 1 second = shake detected
+  if (shakePeakCount >= 3 && !shakeConfirmPending && taskCount > 0) {
+    shakeConfirmPending = true;
+    shakeConfirmStart = millis();
+    drawScreen();
+    shakePeakCount = 0;
+  }
+
+  // Handle shake confirmation timeout
+  if (shakeConfirmPending && millis() - shakeConfirmStart > SHAKE_CONFIRM_TIMEOUT) {
+    shakeConfirmPending = false;
     drawScreen();
   }
 
+  // ── Buttons ───────────────────────────────────────────────────────────
+  // Shake confirm: tap B to confirm, tap A to cancel
+  if (shakeConfirmPending) {
+    if (M5.BtnB.wasPressed()) {
+      // Confirm: delete all done tasks
+      deleteAllDone();
+      shakeConfirmPending = false;
+      drawScreen();
+    } else if (M5.BtnA.wasPressed()) {
+      shakeConfirmPending = false;
+      drawScreen();
+    }
+    delay(50);
+    return;
+  }
+
+  // Button A: short = scroll down, long = delete current task
+  if (M5.BtnA.wasPressed()) {
+    if (screenMode == MODE_TASKS) {
+      if (currentIndex < taskCount - 1) {
+        currentIndex++;
+        if (currentIndex - scrollOffset >= VISIBLE_TASKS) {
+          scrollOffset = currentIndex - VISIBLE_TASKS + 1;
+        }
+      } else {
+        currentIndex = 0;
+        scrollOffset = 0;
+      }
+      drawScreen();
+    }
+  }
+
   if (M5.BtnA.wasHold()) {
-    if (taskCount > 0 && currentIndex < taskCount) {
+    if (screenMode == MODE_TASKS && taskCount > 0 && currentIndex < taskCount) {
       int id = taskList[currentIndex].id;
       memmove(&taskList[currentIndex], &taskList[currentIndex + 1],
               (taskCount - currentIndex - 1) * sizeof(Task));
@@ -143,9 +257,9 @@ void loop() {
     }
   }
 
-  // ── Button B ──────────────────────────────────────────────────────────
+  // Button B: tap = toggle, hold = scroll up
   if (M5.BtnB.wasPressed()) {
-    if (taskCount > 0 && currentIndex < taskCount) {
+    if (screenMode == MODE_TASKS && taskCount > 0 && currentIndex < taskCount) {
       taskList[currentIndex].done = !taskList[currentIndex].done;
       drawScreen();
       pendingAction = PENDING_TOGGLE;
@@ -154,12 +268,12 @@ void loop() {
   }
 
   if (M5.BtnB.wasHold()) {
-    if (currentIndex > 0) {
+    if (screenMode == MODE_TASKS && currentIndex > 0) {
       currentIndex--;
       if (currentIndex < scrollOffset) {
         scrollOffset = currentIndex;
       }
-    } else {
+    } else if (screenMode == MODE_TASKS) {
       currentIndex = taskCount - 1;
       scrollOffset = max(0, taskCount - VISIBLE_TASKS);
     }
@@ -182,6 +296,8 @@ void loop() {
     deleteTask(pendingId);
     pendingAction = NONE;
   }
+
+  delay(50);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -190,7 +306,6 @@ void loop() {
 
 void fetchTasks() {
   if (WiFi.status() != WL_CONNECTED) return;
-
   HTTPClient http;
   http.begin(String("https://") + SERVER_HOST + "/api/tasks");
   http.setTimeout(5000);
@@ -200,18 +315,15 @@ void fetchTasks() {
     String json = http.getString();
     StaticJsonDocument<2048> doc;
     DeserializationError err = deserializeJson(doc, json);
-
     if (!err && doc.is<JsonArray>()) {
       JsonArray arr = doc.as<JsonArray>();
       taskCount = min((int)arr.size(), MAX_TASKS);
-
       for (int i = 0; i < taskCount; i++) {
         taskList[i].id = arr[i]["id"];
         taskList[i].done = arr[i]["done"];
         strncpy(taskList[i].title, arr[i]["title"] | "", MAX_TITLE - 1);
         taskList[i].title[MAX_TITLE - 1] = '\0';
       }
-
       if (currentIndex >= taskCount) {
         currentIndex = max(0, taskCount - 1);
         scrollOffset = max(0, currentIndex - (VISIBLE_TASKS - 1));
@@ -239,8 +351,23 @@ void deleteTask(int id) {
   http.end();
 }
 
+void deleteAllDone() {
+  // Remove all done tasks locally
+  int writeIdx = 0;
+  for (int readIdx = 0; readIdx < taskCount; readIdx++) {
+    if (taskList[readIdx].done) {
+      // Fire delete for this id
+      deleteTask(taskList[readIdx].id);
+    } else {
+      taskList[writeIdx++] = taskList[readIdx];
+    }
+  }
+  taskCount = writeIdx;
+  if (currentIndex >= taskCount) currentIndex = max(0, taskCount - 1);
+}
+
 // ══════════════════════════════════════════════════════════════════════════
-//  DISPLAY HELPERS
+//  HELPERS
 // ══════════════════════════════════════════════════════════════════════════
 
 int countDone() {
@@ -256,16 +383,33 @@ int countDone() {
 void drawScreen() {
   M5.Lcd.fillScreen(BG_COLOR);
 
-  // Header (draw first so status bar can overwrite any font overflow)
+  // If shake confirm is pending, show that instead
+  if (shakeConfirmPending) {
+    drawShakeConfirm();
+    return;
+  }
+
+  // Switch on mode
+  if (screenMode == MODE_STATS) {
+    drawStatsView();
+  } else {
+    drawTasksView();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  TASKS VIEW
+// ══════════════════════════════════════════════════════════════════════════
+
+void drawTasksView() {
+  // Header (draw first so status bar overwrites overflow)
   M5.Lcd.setFont(&fonts::FreeSans12pt7b);
   M5.Lcd.setTextColor(TFT_WHITE);
   M5.Lcd.setCursor(10, HEADER_Y);
   M5.Lcd.println("Today");
 
-  // Status bar (draws on top of header)
   drawStatusBar();
 
-  // Task list
   M5.Lcd.setFont(&fonts::FreeSans9pt7b);
 
   if (taskCount == 0) {
@@ -284,7 +428,6 @@ void drawScreen() {
     int y = LIST_START_Y + (i - scrollOffset) * LIST_ROW_H;
     bool sel = (i == currentIndex);
 
-    // Dot indicator
     if (taskList[i].done) {
       M5.Lcd.fillCircle(14, y + 6, 5, GREEN);
       if (sel) M5.Lcd.drawCircle(14, y + 6, 5, TFT_WHITE);
@@ -292,7 +435,6 @@ void drawScreen() {
       M5.Lcd.drawCircle(14, y + 6, 5, sel ? TFT_WHITE : GRAY);
     }
 
-    // Title color
     if (taskList[i].done) {
       M5.Lcd.setTextColor(sel ? GREEN : DIM);
     } else {
@@ -300,8 +442,6 @@ void drawScreen() {
     }
 
     M5.Lcd.setCursor(26, y);
-
-    // Truncate if needed
     int len = strlen(taskList[i].title);
     if (len > 15) {
       char buf[17];
@@ -313,8 +453,95 @@ void drawScreen() {
     }
   }
 
-  // Progress bar
   drawProgressBar();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  STATS VIEW
+// ══════════════════════════════════════════════════════════════════════════
+
+void drawStatsView() {
+  drawStatusBar();
+
+  M5.Lcd.setFont(&fonts::FreeSans12pt7b);
+  M5.Lcd.setTextColor(TFT_WHITE);
+  M5.Lcd.setCursor(10, HEADER_Y);
+  M5.Lcd.println("Stats");
+
+  M5.Lcd.setFont(&fonts::FreeSans9pt7b);
+
+  // Task completion rate
+  int done = countDone();
+  int total = taskCount;
+  int pct = total > 0 ? done * 100 / total : 0;
+
+  M5.Lcd.setTextColor(TFT_WHITE);
+  M5.Lcd.setCursor(10, 40);
+  M5.Lcd.print("Tasks:");
+  M5.Lcd.setTextColor(GREEN);
+  M5.Lcd.setCursor(80, 40);
+  M5.Lcd.printf("%d/%d", done, total);
+
+  M5.Lcd.setTextColor(GRAY);
+  M5.Lcd.setCursor(10, 58);
+  M5.Lcd.print("Rate:");
+  M5.Lcd.setTextColor(pct >= 50 ? GREEN : GRAY);
+  M5.Lcd.setCursor(80, 58);
+  M5.Lcd.printf("%d%%", pct);
+
+  // Battery
+  int vol_per = M5.Power.getBatteryLevel();
+  bool charging = M5.Power.isCharging();
+  M5.Lcd.setTextColor(TFT_WHITE);
+  M5.Lcd.setCursor(10, 76);
+  M5.Lcd.print("Battery:");
+  M5.Lcd.setTextColor(vol_per > 20 ? GREEN : TFT_RED);
+  M5.Lcd.setCursor(80, 76);
+  M5.Lcd.printf("%d%%", vol_per);
+  if (charging) {
+    M5.Lcd.setTextColor(GREEN);
+    M5.Lcd.setCursor(130, 76);
+    M5.Lcd.print("CHG");
+  }
+
+  // Big progress circle representation
+  drawPieChart(pct);
+}
+
+void drawPieChart(int pct) {
+  // Draw a simple arc/progress indicator
+  int cx = 120, cy = 110, r = 18;
+  M5.Lcd.drawCircle(cx, cy, r, DIVIDER_COLOR);
+
+  if (pct > 0) {
+    // Draw filled arc segments (simplified: just a filled circle segment)
+    M5.Lcd.fillCircle(cx, cy, r - 2, GREEN);
+    // "Erase" the undone portion with black
+    // This is a simple approximation — for a true pie chart we'd need trigonometry
+    M5.Lcd.fillCircle(cx, cy, r - 2, BG_COLOR);
+    M5.Lcd.fillCircle(cx, cy, r - 4, pct >= 50 ? GREEN : DIM);
+  }
+
+  // Percentage text in center
+  M5.Lcd.setFont(&fonts::Font0);
+  M5.Lcd.setTextColor(TFT_WHITE);
+  M5.Lcd.setCursor(cx - 8, cy - 4);
+  M5.Lcd.printf("%d%%", pct);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  SHAKE CONFIRM
+// ══════════════════════════════════════════════════════════════════════════
+
+void drawShakeConfirm() {
+  M5.Lcd.setFont(&fonts::FreeSans9pt7b);
+  M5.Lcd.setTextColor(TFT_WHITE);
+  M5.Lcd.setCursor(10, 30);
+  M5.Lcd.print("Clear all done tasks?");
+
+  M5.Lcd.setTextColor(GRAY);
+  M5.Lcd.setCursor(10, 55);
+  M5.Lcd.print("B: Yes    A: No");
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -324,7 +551,6 @@ void drawScreen() {
 void drawStatusBar() {
   M5.Lcd.fillRect(0, 0, 240, 16, BG_COLOR);
 
-  // WiFi indicator
   M5.Lcd.setFont(&fonts::FreeSans9pt7b);
   if (wifiConnected) {
     M5.Lcd.setTextColor(GREEN);
@@ -332,7 +558,6 @@ void drawStatusBar() {
     M5.Lcd.print("●");
   }
 
-  // Battery
   int vol_per = M5.Power.getBatteryLevel();
   bool charging = M5.Power.isCharging();
 
