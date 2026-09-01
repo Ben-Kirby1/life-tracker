@@ -31,17 +31,23 @@ bool wifiConnected = false;
 // We use the full 240x135 in landscape mode.
 //
 // Layout:
-//   0-14   → Status bar (WiFi icon, time placeholder, battery)
-//   16-26  → Large "Today" header
-//   28-108 → Task list (7 rows of ~11px each)
-//   110-120 → Progress bar
-//   122-135 → Controls hint
+//   0-16   → Status bar (WiFi icon, battery bar)
+//   18-30  → Large "Today" header
+//   32-110 → Task list (5 rows of ~16px each)
+//   112-120 → Progress bar
+//   122-135 → Progress text
 
 #define STATUS_BAR_Y   0
-#define HEADER_Y       16
-#define LIST_START_Y   30
-#define LIST_ROW_H     11
-#define PROGRESS_BAR_Y 110
+#define HEADER_Y       18
+#define LIST_START_Y   34
+#define LIST_ROW_H     16
+#define PROGRESS_BAR_Y 112
+
+// ─── Fonts ───────────────────────────────────────────────────────────────
+// Use larger fonts for readability
+#define FONT_LARGE  &fonts::FreeSans12pt7b    // "Today" header
+#define FONT_SMALL  &fonts::FreeSans9pt7b     // Task list
+#define FONT_TINY   &fonts::FreeSans9pt7b     // Status bar, progress
 
 // ─── Colors ──────────────────────────────────────────────────────────────
 #define BG_COLOR       TFT_BLACK
@@ -104,7 +110,7 @@ void loop() {
   if (M5.BtnA.wasPressed()) {
     if (currentIndex < taskCount - 1) {
       currentIndex++;
-      int maxVisible = 7;
+      int maxVisible = 5;
       if (currentIndex - scrollOffset >= maxVisible) {
         scrollOffset = currentIndex - maxVisible + 1;
       }
@@ -140,7 +146,7 @@ void loop() {
       }
     } else {
       currentIndex = taskCount - 1;
-      scrollOffset = taskCount - 7;
+      scrollOffset = taskCount - 5;
       if (scrollOffset < 0) scrollOffset = 0;
     }
     drawScreen();
@@ -188,7 +194,7 @@ void fetchTasks() {
 
       if (currentIndex >= taskCount) {
         currentIndex = max(0, taskCount - 1);
-        scrollOffset = max(0, currentIndex - 6);
+        scrollOffset = max(0, currentIndex - 4);
       }
     }
   }
@@ -223,41 +229,37 @@ void drawScreen() {
   drawStatusBar();
 
   // Header
-  M5.Lcd.setTextSize(2);
+  M5.Lcd.setFont(FONT_LARGE);
   M5.Lcd.setTextColor(TEXT_PRIMARY);
   M5.Lcd.setCursor(10, HEADER_Y);
   M5.Lcd.println("Today");
 
   // Task list
-  M5.Lcd.setTextSize(1);
-  int visible = 7;
+  M5.Lcd.setFont(FONT_SMALL);
+  int visible = 5;
 
   if (taskCount == 0) {
     // Empty state
     M5.Lcd.setTextColor(TEXT_DIM);
     M5.Lcd.setCursor(10, 60);
-    M5.Lcd.println("No tasks yet");
-    M5.Lcd.setCursor(10, 74);
-    M5.Lcd.setTextSize(1);
+    M5.Lcd.print("No tasks yet");
+    M5.Lcd.setCursor(10, 80);
     M5.Lcd.setTextColor(TEXT_SECONDARY);
     M5.Lcd.print("Add at:");
-    M5.Lcd.setCursor(10, 86);
+    M5.Lcd.setCursor(10, 100);
     M5.Lcd.setTextColor(TEXT_DIM);
-    M5.Lcd.setCursor(10, 86);
     M5.Lcd.print(SERVER_HOST);
   }
 
   for (int i = scrollOffset; i < taskCount && i < scrollOffset + visible; i++) {
     int y = LIST_START_Y + (i - scrollOffset) * LIST_ROW_H;
 
-    // Draw the dot indicator
+    // Draw the dot indicator — larger for visibility
     if (taskList[i].done) {
-      // Filled green circle
-      M5.Lcd.fillCircle(14, y + 4, 4, DOT_DONE);
+      M5.Lcd.fillCircle(14, y + 6, 5, DOT_DONE);
     } else {
-      // Outlined circle — white if selected, gray otherwise
       uint16_t color = (i == currentIndex) ? DOT_SELECTED : DOT_ACTIVE;
-      M5.Lcd.drawCircle(14, y + 4, 4, color);
+      M5.Lcd.drawCircle(14, y + 6, 5, color);
     }
 
     // Task title
@@ -269,14 +271,14 @@ void drawScreen() {
       M5.Lcd.setTextColor(TEXT_SECONDARY);
     }
 
-    M5.Lcd.setCursor(24, y);
+    M5.Lcd.setCursor(26, y);
 
-    // Truncate title if too long
+    // Truncate title if needed (fewer chars with bigger font)
     char buf[MAX_TITLE + 3];
     int len = strlen(taskList[i].title);
-    if (len > 20) {
-      memcpy(buf, taskList[i].title, 18);
-      buf[18] = '.'; buf[19] = '.'; buf[20] = '\0';
+    if (len > 15) {
+      memcpy(buf, taskList[i].title, 13);
+      buf[13] = '.'; buf[14] = '.'; buf[15] = '\0';
       M5.Lcd.print(buf);
     } else {
       M5.Lcd.print(taskList[i].title);
@@ -289,39 +291,39 @@ void drawScreen() {
 
 void drawStatusBar() {
   // Left side: WiFi indicator
-  M5.Lcd.setTextSize(1);
+  M5.Lcd.setFont(FONT_TINY);
   if (wifiConnected) {
     M5.Lcd.setTextColor(ACCENT_COLOR);
-    M5.Lcd.setCursor(10, STATUS_BAR_Y + 2);
-    M5.Lcd.print("●");  // WiFi dot
+    M5.Lcd.setCursor(10, STATUS_BAR_Y + 1);
+    M5.Lcd.print("●");
   }
 
   // Right side: battery bar
   int vol_per = M5.Power.getBatteryLevel();
   bool charging = M5.Power.isCharging();
 
-  // Draw battery icon outline
-  int bx = 195, by = 3, bw = 35, bh = 9;
-  M5.Lcd.drawRect(bx, by, bw, bh, TEXT_SECONDARY);       // body
-  M5.Lcd.fillRect(bx + bw, by + 2, 3, bh - 4, TEXT_SECONDARY); // terminal
+  // Draw battery icon outline — bigger
+  int bx = 190, by = 2, bw = 40, bh = 12;
+  M5.Lcd.drawRect(bx, by, bw, bh, TEXT_SECONDARY);
+  M5.Lcd.fillRect(bx + bw, by + 3, 3, bh - 6, TEXT_SECONDARY);
 
   // Fill based on level
-  int fillW = map(constrain(vol_per, 0, 100), 0, 100, 1, bw - 3);
+  int fillW = map(constrain(vol_per, 0, 100), 0, 100, 0, bw - 4);
   uint16_t batColor = vol_per > 20 ? ACCENT_COLOR : TFT_RED;
   if (vol_per > 0) {
-    M5.Lcd.fillRect(bx + 2, by + 2, fillW, bh - 3, batColor);
+    M5.Lcd.fillRect(bx + 2, by + 2, fillW, bh - 4, batColor);
   }
 
   // Charging indicator
   if (charging) {
-    M5.Lcd.setTextSize(1);
+    M5.Lcd.setFont(FONT_TINY);
     M5.Lcd.setTextColor(ACCENT_COLOR);
-    M5.Lcd.setCursor(175, STATUS_BAR_Y + 2);
+    M5.Lcd.setCursor(170, STATUS_BAR_Y + 1);
     M5.Lcd.print("⚡");
   }
 
   // Thin separator line
-  M5.Lcd.drawFastHLine(0, 14, 240, 0x2104);
+  M5.Lcd.drawFastHLine(0, 16, 240, 0x2104);
 }
 
 void drawProgressBar() {
@@ -330,17 +332,17 @@ void drawProgressBar() {
   int pct = (doneCount * 100) / taskCount;
 
   // Background track
-  M5.Lcd.fillRoundRect(10, PROGRESS_BAR_Y, 220, 6, 3, 0x2104);
+  M5.Lcd.fillRoundRect(10, PROGRESS_BAR_Y, 220, 8, 4, 0x2104);
 
   // Fill
   if (pct > 0) {
     int fillW = map(pct, 0, 100, 0, 216);
-    M5.Lcd.fillRoundRect(12, PROGRESS_BAR_Y + 1, fillW, 4, 2, ACCENT_COLOR);
+    M5.Lcd.fillRoundRect(12, PROGRESS_BAR_Y + 1, fillW, 6, 3, ACCENT_COLOR);
   }
 
   // Text
-  M5.Lcd.setTextSize(1);
+  M5.Lcd.setFont(FONT_TINY);
   M5.Lcd.setTextColor(TEXT_SECONDARY);
-  M5.Lcd.setCursor(10, PROGRESS_BAR_Y + 10);
+  M5.Lcd.setCursor(10, PROGRESS_BAR_Y + 14);
   M5.Lcd.printf("%d/%d done", doneCount, taskCount);
 }
