@@ -5,8 +5,8 @@
 #include <ArduinoJson.h>
 
 // ─── WiFi Configuration ──────────────────────────────────────────────────
-const char* WIFI_SSID = "5G University House Midtown";
-const char* WIFI_PASS = "your_wifi_password";
+const char* WIFI_SSID = "University House Midtown";
+const char* WIFI_PASS = "Cat-Lime~Ragdoll";
 const char* SERVER_HOST = "life-tracker-server-ipri.onrender.com";  // HTTPS, no port needed
 
 // ─── Task Data ───────────────────────────────────────────────────────────
@@ -42,7 +42,6 @@ bool wifiConnected = false;
 #define LIST_START_Y   30
 #define LIST_ROW_H     11
 #define PROGRESS_BAR_Y 110
-#define HINT_Y         122
 
 // ─── Colors ──────────────────────────────────────────────────────────────
 #define BG_COLOR       TFT_BLACK
@@ -286,9 +285,6 @@ void drawScreen() {
 
   // Progress bar
   drawProgressBar();
-
-  // Controls hint
-  drawHint();
 }
 
 void drawStatusBar() {
@@ -300,19 +296,29 @@ void drawStatusBar() {
     M5.Lcd.print("●");  // WiFi dot
   }
 
-  // Right side: battery
+  // Right side: battery bar
   int vol_per = M5.Power.getBatteryLevel();
   bool charging = M5.Power.isCharging();
 
-  M5.Lcd.setTextSize(1);
-  M5.Lcd.setTextColor(TEXT_SECONDARY);
-  M5.Lcd.setCursor(180, STATUS_BAR_Y + 2);
+  // Draw battery icon outline
+  int bx = 195, by = 3, bw = 35, bh = 9;
+  M5.Lcd.drawRect(bx, by, bw, bh, TEXT_SECONDARY);       // body
+  M5.Lcd.fillRect(bx + bw, by + 2, 3, bh - 4, TEXT_SECONDARY); // terminal
 
+  // Fill based on level
+  int fillW = map(constrain(vol_per, 0, 100), 0, 100, 1, bw - 3);
+  uint16_t batColor = vol_per > 20 ? ACCENT_COLOR : TFT_RED;
+  if (vol_per > 0) {
+    M5.Lcd.fillRect(bx + 2, by + 2, fillW, bh - 3, batColor);
+  }
+
+  // Charging indicator
   if (charging) {
+    M5.Lcd.setTextSize(1);
     M5.Lcd.setTextColor(ACCENT_COLOR);
+    M5.Lcd.setCursor(175, STATUS_BAR_Y + 2);
     M5.Lcd.print("⚡");
   }
-  M5.Lcd.printf("%d%%", vol_per);
 
   // Thin separator line
   M5.Lcd.drawFastHLine(0, 14, 240, 0x2104);
@@ -337,11 +343,4 @@ void drawProgressBar() {
   M5.Lcd.setTextColor(TEXT_SECONDARY);
   M5.Lcd.setCursor(10, PROGRESS_BAR_Y + 10);
   M5.Lcd.printf("%d/%d done", doneCount, taskCount);
-}
-
-void drawHint() {
-  M5.Lcd.setTextSize(1);
-  M5.Lcd.setTextColor(TEXT_DIM);
-  M5.Lcd.setCursor(10, HINT_Y + 5);
-  M5.Lcd.print("A:v  Ahold:del  B:~  Bhold:^");
 }
