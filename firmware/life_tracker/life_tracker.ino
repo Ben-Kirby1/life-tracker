@@ -51,7 +51,6 @@ bool wifiConnected = false;
 
 // ─── Colors ──────────────────────────────────────────────────────────────
 #define BG_COLOR       TFT_BLACK
-#define CARD_COLOR     0x0841      // very dark gray-blue
 #define ACCENT_COLOR   0x07E0      // green
 #define TEXT_PRIMARY   0xFFFF      // white
 #define TEXT_SECONDARY 0x8410      // gray
@@ -122,20 +121,28 @@ void loop() {
   }
   if (M5.BtnA.wasHold()) {
     if (taskCount > 0 && currentIndex < taskCount) {
-      deleteTask(taskList[currentIndex].id);
-      delay(300);
-      fetchTasks();
+      // Delete locally first — instant
+      int id = taskList[currentIndex].id;
+      for (int i = currentIndex; i < taskCount - 1; i++) {
+        taskList[i] = taskList[i + 1];
+      }
+      taskCount--;
+      if (currentIndex >= taskCount) currentIndex = max(0, taskCount - 1);
       drawScreen();
+      // Then fire the HTTP call in the background
+      deleteTask(id);
     }
   }
 
   // Button B: tap = toggle, hold = scroll up
   if (M5.BtnB.wasPressed()) {
     if (taskCount > 0 && currentIndex < taskCount) {
-      toggleTask(taskList[currentIndex].id);
-      delay(300);
-      fetchTasks();
+      // Toggle locally first — instant
+      taskList[currentIndex].done = !taskList[currentIndex].done;
+      doneCount += taskList[currentIndex].done ? 1 : -1;
       drawScreen();
+      // Then fire the HTTP call in the background
+      toggleTask(taskList[currentIndex].id);
     }
   }
   if (M5.BtnB.wasHold()) {
@@ -159,8 +166,6 @@ void loop() {
     drawScreen();
     lastFetch = millis();
   }
-
-  delay(50);
 }
 
 // ─── HTTP ────────────────────────────────────────────────────────────────
