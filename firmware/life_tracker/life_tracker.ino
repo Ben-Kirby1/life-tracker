@@ -4,12 +4,18 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
-// ─── WiFi Configuration ──────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+//  CONFIGURATION
+// ══════════════════════════════════════════════════════════════════════════
+
 const char* WIFI_SSID = "University House Midtown";
 const char* WIFI_PASS = "Cat-Lime~Ragdoll";
-const char* SERVER_HOST = "life-tracker-server-ipri.onrender.com";  // HTTPS, no port needed
+const char* SERVER_HOST = "life-tracker-server-ipri.onrender.com";
 
-// ─── Task Data ───────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+//  TASK DATA
+// ══════════════════════════════════════════════════════════════════════════
+
 #define MAX_TASKS 10
 #define MAX_TITLE 35
 
@@ -23,53 +29,47 @@ Task taskList[MAX_TASKS];
 int taskCount = 0;
 int currentIndex = 0;
 int scrollOffset = 0;
-int doneCount = 0;
 bool wifiConnected = false;
 
-// ─── Pending HTTP Actions (non-blocking) ─────────────────────────────────
+// Deferred HTTP (keeps button presses instant)
 enum PendingAction { NONE, PENDING_TOGGLE, PENDING_DELETE };
 PendingAction pendingAction = NONE;
 int pendingId = 0;
 
-// ─── Screen Layout (135x240 portrait) ────────────────────────────────────
-// The StickS3 is rotated so the 240-wide dimension is horizontal.
-// We use the full 240x135 in landscape mode.
-//
-// Layout:
-//   0-16   → Status bar (WiFi icon, battery bar)
-//   18-30  → Large "Today" header
-//   38-91  → Task list (3 rows of ~17px each)
-//   96-104 → Progress bar
-//   110-135 → Progress text
+// ══════════════════════════════════════════════════════════════════════════
+//  SCREEN LAYOUT  (240 × 135 landscape)
+//  Row 0-16   Status bar + divider
+//  Row 18-30  "Today" header
+//  Row 40-91  Task list (3 rows × 17px)
+//  Row 96-104 Progress bar
+//  Row 110+   Progress text
+// ══════════════════════════════════════════════════════════════════════════
 
-#define STATUS_BAR_Y   0
 #define HEADER_Y       18
 #define LIST_START_Y   40
 #define LIST_ROW_H     17
-// Progress bar
 #define PROGRESS_BAR_Y 96
+#define VISIBLE_TASKS  3
 
-// ─── Fonts ───────────────────────────────────────────────────────────────
-// Use larger fonts for readability
-#define FONT_LARGE  &fonts::FreeSans12pt7b    // "Today" header
-#define FONT_SMALL  &fonts::FreeSans9pt7b     // Task list
-#define FONT_TINY   &fonts::FreeSans9pt7b     // Status bar, progress
+// ══════════════════════════════════════════════════════════════════════════
+//  COLORS
+// ══════════════════════════════════════════════════════════════════════════
 
-// ─── Colors ──────────────────────────────────────────────────────────────
 #define BG_COLOR       TFT_BLACK
-#define ACCENT_COLOR   0x07E0      // green
-#define TEXT_PRIMARY   0xFFFF      // white
-#define TEXT_SECONDARY 0x8410      // gray
-#define TEXT_DIM       0x4208      // dim gray
-#define DOT_DONE       0x07E0      // green
-#define DOT_ACTIVE     0x8410      // gray
-#define DOT_SELECTED   0xFFFF      // white
+#define GREEN          0x07E0
+#define GRAY           0x8410
+#define DIM            0x4208
+#define DIVIDER_COLOR  0x2104
+
+// ══════════════════════════════════════════════════════════════════════════
+//  SETUP
+// ══════════════════════════════════════════════════════════════════════════
 
 void setup() {
   M5.begin();
   M5.Lcd.setRotation(1);
 
-  // Disable speaker whine
+  // Kill speaker whine
   M5.Speaker.end();
   m5::M5PM1_Class pmu;
   if (pmu.begin()) {
@@ -79,23 +79,15 @@ void setup() {
     pmu.setGPIOOutput(m5::M5PM1_Class::gpio3, false);
   }
   M5.Power.setExtOutput(false);
-
   M5.Lcd.setBrightness(10);
-  M5.Lcd.fillScreen(BG_COLOR);
 
-  // Connect to WiFi
-  M5.Lcd.setTextSize(1);
-  M5.Lcd.setTextColor(TEXT_SECONDARY);
-  M5.Lcd.setCursor(10, 50);
-  M5.Lcd.print("Connecting...");
-
+  // Connect WiFi
+  showSplash();
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 40) {
     delay(500);
-    M5.Lcd.setCursor(10, 62);
-    M5.Lcd.printf("Attempt %d/40", attempts + 1);
     attempts++;
   }
 
@@ -104,20 +96,32 @@ void setup() {
     fetchTasks();
   }
 
-  // Remove splash — draw the real UI
   drawScreen();
 }
+
+void showSplash() {
+  M5.Lcd.fillScreen(BG_COLOR);
+  M5.Lcd.setTextSize(1);
+  M5.Lcd.setTextColor(GRAY);
+  M5.Lcd.setCursor(10, 50);
+  M5.Lcd.print("Connecting...");
+  M5.Lcd.setCursor(10, 62);
+  M5.Lcd.printf("WiFi: %s", WIFI_SSID);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  MAIN LOOP
+// ══════════════════════════════════════════════════════════════════════════
 
 void loop() {
   M5.update();
 
-  // Button A: short = scroll down, long = delete current task
+  // ── Button A ──────────────────────────────────────────────────────────
   if (M5.BtnA.wasPressed()) {
     if (currentIndex < taskCount - 1) {
       currentIndex++;
-      int maxVisible = 3;
-      if (currentIndex - scrollOffset >= maxVisible) {
-        scrollOffset = currentIndex - maxVisible + 1;
+      if (currentIndex - scrollOffset >= VISIBLE_TASKS) {
+        scrollOffset = currentIndex - VISIBLE_TASKS + 1;
       }
     } else {
       currentIndex = 0;
@@ -125,34 +129,30 @@ void loop() {
     }
     drawScreen();
   }
+
   if (M5.BtnA.wasHold()) {
     if (taskCount > 0 && currentIndex < taskCount) {
-      // Delete locally first — instant
       int id = taskList[currentIndex].id;
-      for (int i = currentIndex; i < taskCount - 1; i++) {
-        taskList[i] = taskList[i + 1];
-      }
+      memmove(&taskList[currentIndex], &taskList[currentIndex + 1],
+              (taskCount - currentIndex - 1) * sizeof(Task));
       taskCount--;
       if (currentIndex >= taskCount) currentIndex = max(0, taskCount - 1);
       drawScreen();
-      // Then fire the HTTP call in the background
       pendingAction = PENDING_DELETE;
       pendingId = id;
     }
   }
 
-  // Button B: tap = toggle, hold = scroll up
+  // ── Button B ──────────────────────────────────────────────────────────
   if (M5.BtnB.wasPressed()) {
     if (taskCount > 0 && currentIndex < taskCount) {
-      // Toggle locally first — instant
       taskList[currentIndex].done = !taskList[currentIndex].done;
-      doneCount += taskList[currentIndex].done ? 1 : -1;
       drawScreen();
-      // Then fire the HTTP call in the background
       pendingAction = PENDING_TOGGLE;
       pendingId = taskList[currentIndex].id;
     }
   }
+
   if (M5.BtnB.wasHold()) {
     if (currentIndex > 0) {
       currentIndex--;
@@ -161,13 +161,12 @@ void loop() {
       }
     } else {
       currentIndex = taskCount - 1;
-      scrollOffset = taskCount - 3;
-      if (scrollOffset < 0) scrollOffset = 0;
+      scrollOffset = max(0, taskCount - VISIBLE_TASKS);
     }
     drawScreen();
   }
 
-  // Refresh every 30 seconds
+  // ── Periodic refresh ──────────────────────────────────────────────────
   static unsigned long lastFetch = 0;
   if (millis() - lastFetch > 30000) {
     if (wifiConnected) fetchTasks();
@@ -175,7 +174,7 @@ void loop() {
     lastFetch = millis();
   }
 
-  // Process pending HTTP action (non-blocking — runs after loop has polled buttons)
+  // ── Fire deferred HTTP ────────────────────────────────────────────────
   if (pendingAction == PENDING_TOGGLE) {
     toggleTask(pendingId);
     pendingAction = NONE;
@@ -185,14 +184,15 @@ void loop() {
   }
 }
 
-// ─── HTTP ────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+//  HTTP
+// ══════════════════════════════════════════════════════════════════════════
 
 void fetchTasks() {
   if (WiFi.status() != WL_CONNECTED) return;
 
   HTTPClient http;
-  String url = String("https://") + SERVER_HOST + "/api/tasks";
-  http.begin(url);
+  http.begin(String("https://") + SERVER_HOST + "/api/tasks");
   http.setTimeout(5000);
   int code = http.GET();
 
@@ -204,19 +204,17 @@ void fetchTasks() {
     if (!err && doc.is<JsonArray>()) {
       JsonArray arr = doc.as<JsonArray>();
       taskCount = min((int)arr.size(), MAX_TASKS);
-      doneCount = 0;
 
       for (int i = 0; i < taskCount; i++) {
         taskList[i].id = arr[i]["id"];
         taskList[i].done = arr[i]["done"];
         strncpy(taskList[i].title, arr[i]["title"] | "", MAX_TITLE - 1);
         taskList[i].title[MAX_TITLE - 1] = '\0';
-        if (taskList[i].done) doneCount++;
       }
 
       if (currentIndex >= taskCount) {
         currentIndex = max(0, taskCount - 1);
-        scrollOffset = max(0, currentIndex - 2);
+        scrollOffset = max(0, currentIndex - (VISIBLE_TASKS - 1));
       }
     }
   }
@@ -226,8 +224,7 @@ void fetchTasks() {
 void toggleTask(int id) {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
-  String url = String("https://") + SERVER_HOST + "/api/tasks/" + id + "/toggle";
-  http.begin(url);
+  http.begin(String("https://") + SERVER_HOST + "/api/tasks/" + id + "/toggle");
   http.setTimeout(5000);
   http.POST("");
   http.end();
@@ -236,77 +233,78 @@ void toggleTask(int id) {
 void deleteTask(int id) {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
-  String url = String("https://") + SERVER_HOST + "/api/tasks/" + id;
-  http.begin(url);
+  http.begin(String("https://") + SERVER_HOST + "/api/tasks/" + id);
   http.setTimeout(5000);
   http.sendRequest("DELETE", "");
   http.end();
 }
 
-// ─── Display ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+//  DISPLAY HELPERS
+// ══════════════════════════════════════════════════════════════════════════
+
+int countDone() {
+  int n = 0;
+  for (int i = 0; i < taskCount; i++) if (taskList[i].done) n++;
+  return n;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  DRAW SCREEN
+// ══════════════════════════════════════════════════════════════════════════
 
 void drawScreen() {
   M5.Lcd.fillScreen(BG_COLOR);
 
-  // Header — draw this FIRST so it goes under the status bar
-  M5.Lcd.setFont(FONT_LARGE);
-  M5.Lcd.setTextColor(TEXT_PRIMARY);
+  // Header (draw first so status bar can overwrite any font overflow)
+  M5.Lcd.setFont(&fonts::FreeSans12pt7b);
+  M5.Lcd.setTextColor(TFT_WHITE);
   M5.Lcd.setCursor(10, HEADER_Y);
   M5.Lcd.println("Today");
 
-  // Status bar — draw AFTER header so it overwrites any font overflow
+  // Status bar (draws on top of header)
   drawStatusBar();
 
   // Task list
-  M5.Lcd.setFont(FONT_SMALL);
-  int visible = 3;
+  M5.Lcd.setFont(&fonts::FreeSans9pt7b);
 
   if (taskCount == 0) {
-    // Empty state
-    M5.Lcd.setTextColor(TEXT_DIM);
+    M5.Lcd.setTextColor(DIM);
     M5.Lcd.setCursor(10, 60);
     M5.Lcd.print("No tasks yet");
     M5.Lcd.setCursor(10, 80);
-    M5.Lcd.setTextColor(TEXT_SECONDARY);
+    M5.Lcd.setTextColor(GRAY);
     M5.Lcd.print("Add at:");
     M5.Lcd.setCursor(10, 100);
-    M5.Lcd.setTextColor(TEXT_DIM);
+    M5.Lcd.setTextColor(DIM);
     M5.Lcd.print(SERVER_HOST);
   }
 
-  for (int i = scrollOffset; i < taskCount && i < scrollOffset + visible; i++) {
+  for (int i = scrollOffset; i < taskCount && i < scrollOffset + VISIBLE_TASKS; i++) {
     int y = LIST_START_Y + (i - scrollOffset) * LIST_ROW_H;
+    bool sel = (i == currentIndex);
 
-    // Draw the dot indicator — larger for visibility
-    bool isSelected = (i == currentIndex);
+    // Dot indicator
     if (taskList[i].done) {
-      if (isSelected) {
-        // Selected + done: bright green fill with white ring
-        M5.Lcd.fillCircle(14, y + 6, 5, DOT_DONE);
-        M5.Lcd.drawCircle(14, y + 6, 5, TFT_WHITE);
-      } else {
-        M5.Lcd.fillCircle(14, y + 6, 5, DOT_DONE);
-      }
+      M5.Lcd.fillCircle(14, y + 6, 5, GREEN);
+      if (sel) M5.Lcd.drawCircle(14, y + 6, 5, TFT_WHITE);
     } else {
-      uint16_t color = isSelected ? DOT_SELECTED : DOT_ACTIVE;
-      M5.Lcd.drawCircle(14, y + 6, 5, color);
+      M5.Lcd.drawCircle(14, y + 6, 5, sel ? TFT_WHITE : GRAY);
     }
 
-    // Task title
+    // Title color
     if (taskList[i].done) {
-      M5.Lcd.setTextColor(isSelected ? TFT_GREEN : TEXT_DIM);
-    } else if (i == currentIndex) {
-      M5.Lcd.setTextColor(TEXT_PRIMARY);
+      M5.Lcd.setTextColor(sel ? GREEN : DIM);
     } else {
-      M5.Lcd.setTextColor(TEXT_SECONDARY);
+      M5.Lcd.setTextColor(sel ? TFT_WHITE : GRAY);
     }
 
     M5.Lcd.setCursor(26, y);
 
-    // Truncate title if needed (fewer chars with bigger font)
-    char buf[MAX_TITLE + 3];
+    // Truncate if needed
     int len = strlen(taskList[i].title);
     if (len > 15) {
+      char buf[17];
       memcpy(buf, taskList[i].title, 13);
       buf[13] = '.'; buf[14] = '.'; buf[15] = '\0';
       M5.Lcd.print(buf);
@@ -319,65 +317,59 @@ void drawScreen() {
   drawProgressBar();
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+//  STATUS BAR
+// ══════════════════════════════════════════════════════════════════════════
+
 void drawStatusBar() {
-  // Clear the entire status bar area first to prevent ghosting
   M5.Lcd.fillRect(0, 0, 240, 16, BG_COLOR);
-  
-  // Left side: WiFi indicator
-  M5.Lcd.setFont(FONT_TINY);
+
+  // WiFi indicator
+  M5.Lcd.setFont(&fonts::FreeSans9pt7b);
   if (wifiConnected) {
-    M5.Lcd.setTextColor(ACCENT_COLOR);
-    M5.Lcd.setCursor(10, STATUS_BAR_Y + 1);
+    M5.Lcd.setTextColor(GREEN);
+    M5.Lcd.setCursor(10, 1);
     M5.Lcd.print("●");
   }
 
-  // Right side: battery bar
+  // Battery
   int vol_per = M5.Power.getBatteryLevel();
   bool charging = M5.Power.isCharging();
 
-  // Draw battery icon outline — bigger
-  int bx = 190, by = 2, bw = 40, bh = 12;
-  M5.Lcd.drawRect(bx, by, bw, bh, TEXT_SECONDARY);
-  M5.Lcd.fillRect(bx + bw, by + 3, 3, bh - 6, TEXT_SECONDARY);
+  int bx = 190, bw = 40, bh = 12;
+  M5.Lcd.drawRect(bx, 2, bw, bh, GRAY);
+  M5.Lcd.fillRect(bx + bw, 5, 3, bh - 6, GRAY);
 
-  // Fill based on level
-  int fillW = map(constrain(vol_per, 0, 100), 0, 100, 0, bw - 4);
-  uint16_t batColor = vol_per > 20 ? ACCENT_COLOR : TFT_RED;
-  if (vol_per > 0) {
-    M5.Lcd.fillRect(bx + 2, by + 2, fillW, bh - 4, batColor);
-  }
+  int fillW = constrain(vol_per, 0, 100) * (bw - 4) / 100;
+  M5.Lcd.fillRect(bx + 2, 4, fillW, bh - 4, vol_per > 20 ? GREEN : TFT_RED);
 
-  // Charging indicator
   if (charging) {
-    M5.Lcd.setFont(FONT_TINY);
-    M5.Lcd.setTextColor(ACCENT_COLOR);
-    M5.Lcd.setCursor(170, STATUS_BAR_Y + 1);
+    M5.Lcd.setTextColor(GREEN);
+    M5.Lcd.setCursor(170, 1);
     M5.Lcd.print("⚡");
   }
 
-  // Thin separator line
-  M5.Lcd.drawFastHLine(0, 16, 240, 0x2104);
+  M5.Lcd.drawFastHLine(0, 16, 240, DIVIDER_COLOR);
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+//  PROGRESS BAR
+// ══════════════════════════════════════════════════════════════════════════
 
 void drawProgressBar() {
   if (taskCount == 0) return;
 
-  int pct = (doneCount * 100) / taskCount;
+  int done = countDone();
+  int pct = done * 100 / taskCount;
 
-  // Background track
-  M5.Lcd.fillRoundRect(10, PROGRESS_BAR_Y, 220, 8, 4, 0x2104);
-
-  // Fill
+  M5.Lcd.fillRoundRect(10, PROGRESS_BAR_Y, 220, 8, 4, DIVIDER_COLOR);
   if (pct > 0) {
-    int fillW = map(pct, 0, 100, 0, 216);
-    M5.Lcd.fillRoundRect(12, PROGRESS_BAR_Y + 1, fillW, 6, 3, ACCENT_COLOR);
+    int w = pct * 216 / 100;
+    M5.Lcd.fillRoundRect(12, PROGRESS_BAR_Y + 1, w, 6, 3, GREEN);
   }
 
-  // Text
   M5.Lcd.setFont(&fonts::Font0);
-  M5.Lcd.setTextColor(TEXT_SECONDARY);
+  M5.Lcd.setTextColor(GRAY);
   M5.Lcd.setCursor(10, PROGRESS_BAR_Y + 14);
-  M5.Lcd.printf("%d/%d done", doneCount, taskCount);
-  // Clear any leftover text below
-  M5.Lcd.fillRect(0, PROGRESS_BAR_Y + 24, 240, 20, BG_COLOR);
+  M5.Lcd.printf("%d/%d done", done, taskCount);
 }
