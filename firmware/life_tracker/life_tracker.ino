@@ -6,8 +6,8 @@
 
 // ─── WiFi Configuration ──────────────────────────────────────────────────
 // Set these to your home WiFi and the IP of the computer running the Flask server
-const char* WIFI_SSID = "5G University House Midtown";
-const char* WIFI_PASS = "your_wifi_password";
+const char* WIFI_SSID = "University House Midtown";
+const char* WIFI_PASS = "Cat-Lime~Ragdoll";
 const char* SERVER_HOST = "life-tracker-server-ipri.onrender.com";  // HTTPS, no port needed
 
 // ─── Task Data ───────────────────────────────────────────────────────────
@@ -53,35 +53,55 @@ void setup() {
   M5.Lcd.setBrightness(10);
   M5.Lcd.fillScreen(TFT_BLACK);
 
-  // Show splash while connecting
+  // Connect to WiFi
   M5.Lcd.setTextSize(1);
   M5.Lcd.setTextColor(TFT_CYAN);
-  M5.Lcd.setCursor(10, 50);
-  M5.Lcd.print("Connecting to WiFi...");
+  M5.Lcd.setCursor(10, 30);
+  M5.Lcd.print("Connecting to:");
+  M5.Lcd.setCursor(10, 42);
+  M5.Lcd.print(WIFI_SSID);
 
-  // Connect to WiFi
+  WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
+  
   int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+  int lastStatus = -1;
+  while (WiFi.status() != WL_CONNECTED && attempts < 40) {
     delay(500);
-    M5.Lcd.print(".");
+    M5.Lcd.setCursor(10, 55);
+    M5.Lcd.printf("Attempt %d/40", attempts + 1);
     attempts++;
+    
+    int s = WiFi.status();
+    if (s != lastStatus) {
+      M5.Lcd.setCursor(10, 68);
+      M5.Lcd.fillRect(10, 68, 220, 40, TFT_BLACK);
+      M5.Lcd.printf("Status: %d", s);
+      lastStatus = s;
+    }
   }
 
   if (WiFi.status() == WL_CONNECTED) {
     wifiConnected = true;
-    M5.Lcd.fillRect(0, 40, 240, 40, TFT_BLACK);
+    M5.Lcd.fillRect(0, 20, 240, 60, TFT_BLACK);
     M5.Lcd.setTextColor(TFT_GREEN);
-    M5.Lcd.setCursor(10, 50);
+    M5.Lcd.setCursor(10, 35);
     M5.Lcd.print("WiFi OK!");
-    M5.Lcd.setCursor(10, 62);
+    M5.Lcd.setCursor(10, 50);
     M5.Lcd.print(WiFi.localIP());
     fetchTasks();
   } else {
-    M5.Lcd.fillRect(0, 40, 240, 40, TFT_BLACK);
+    M5.Lcd.fillRect(0, 20, 240, 80, TFT_BLACK);
     M5.Lcd.setTextColor(TFT_RED);
+    M5.Lcd.setCursor(10, 35);
+    M5.Lcd.print("WiFi FAILED");
     M5.Lcd.setCursor(10, 50);
-    M5.Lcd.print("WiFi failed");
+    int s = WiFi.status();
+    M5.Lcd.printf("Code: %d", s);
+    M5.Lcd.setCursor(10, 62);
+    if (s == 1) M5.Lcd.print("= No SSID found");
+    else if (s == 4) M5.Lcd.print("= Connection failed");
+    else M5.Lcd.print("= Check 2.4GHz band");
   }
 
   delay(1500);
