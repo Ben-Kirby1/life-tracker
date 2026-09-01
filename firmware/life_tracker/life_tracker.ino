@@ -33,15 +33,15 @@ bool wifiConnected = false;
 // Layout:
 //   0-16   → Status bar (WiFi icon, battery bar)
 //   18-30  → Large "Today" header
-//   32-110 → Task list (5 rows of ~16px each)
-//   112-120 → Progress bar
-//   122-135 → Progress text
+//   38-102 → Task list (4 rows of ~16px each)
+//   105-113 → Progress bar
+//   115-135 → Progress text
 
 #define STATUS_BAR_Y   0
 #define HEADER_Y       18
-#define LIST_START_Y   34
+#define LIST_START_Y   40
 #define LIST_ROW_H     16
-#define PROGRESS_BAR_Y 112
+#define PROGRESS_BAR_Y 103
 
 // ─── Fonts ───────────────────────────────────────────────────────────────
 // Use larger fonts for readability
@@ -109,7 +109,7 @@ void loop() {
   if (M5.BtnA.wasPressed()) {
     if (currentIndex < taskCount - 1) {
       currentIndex++;
-      int maxVisible = 5;
+      int maxVisible = 4;
       if (currentIndex - scrollOffset >= maxVisible) {
         scrollOffset = currentIndex - maxVisible + 1;
       }
@@ -153,7 +153,7 @@ void loop() {
       }
     } else {
       currentIndex = taskCount - 1;
-      scrollOffset = taskCount - 5;
+      scrollOffset = taskCount - 4;
       if (scrollOffset < 0) scrollOffset = 0;
     }
     drawScreen();
@@ -199,7 +199,7 @@ void fetchTasks() {
 
       if (currentIndex >= taskCount) {
         currentIndex = max(0, taskCount - 1);
-        scrollOffset = max(0, currentIndex - 4);
+        scrollOffset = max(0, currentIndex - 3);
       }
     }
   }
@@ -241,7 +241,7 @@ void drawScreen() {
 
   // Task list
   M5.Lcd.setFont(FONT_SMALL);
-  int visible = 5;
+  int visible = 4;
 
   if (taskCount == 0) {
     // Empty state
@@ -260,16 +260,23 @@ void drawScreen() {
     int y = LIST_START_Y + (i - scrollOffset) * LIST_ROW_H;
 
     // Draw the dot indicator — larger for visibility
+    bool isSelected = (i == currentIndex);
     if (taskList[i].done) {
-      M5.Lcd.fillCircle(14, y + 6, 5, DOT_DONE);
+      if (isSelected) {
+        // Selected + done: bright green fill with white ring
+        M5.Lcd.fillCircle(14, y + 6, 5, DOT_DONE);
+        M5.Lcd.drawCircle(14, y + 6, 5, TFT_WHITE);
+      } else {
+        M5.Lcd.fillCircle(14, y + 6, 5, DOT_DONE);
+      }
     } else {
-      uint16_t color = (i == currentIndex) ? DOT_SELECTED : DOT_ACTIVE;
+      uint16_t color = isSelected ? DOT_SELECTED : DOT_ACTIVE;
       M5.Lcd.drawCircle(14, y + 6, 5, color);
     }
 
     // Task title
     if (taskList[i].done) {
-      M5.Lcd.setTextColor(TEXT_DIM);
+      M5.Lcd.setTextColor(isSelected ? TFT_GREEN : TEXT_DIM);
     } else if (i == currentIndex) {
       M5.Lcd.setTextColor(TEXT_PRIMARY);
     } else {
@@ -295,6 +302,9 @@ void drawScreen() {
 }
 
 void drawStatusBar() {
+  // Clear the entire status bar area first to prevent ghosting
+  M5.Lcd.fillRect(0, 0, 240, 16, BG_COLOR);
+  
   // Left side: WiFi indicator
   M5.Lcd.setFont(FONT_TINY);
   if (wifiConnected) {
@@ -350,4 +360,6 @@ void drawProgressBar() {
   M5.Lcd.setTextColor(TEXT_SECONDARY);
   M5.Lcd.setCursor(10, PROGRESS_BAR_Y + 14);
   M5.Lcd.printf("%d/%d done", doneCount, taskCount);
+  // Clear any leftover text below the progress line
+  M5.Lcd.fillRect(0, PROGRESS_BAR_Y + 24, 240, 15, BG_COLOR);
 }
