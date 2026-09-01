@@ -26,6 +26,11 @@ int scrollOffset = 0;
 int doneCount = 0;
 bool wifiConnected = false;
 
+// ─── Pending HTTP Actions (non-blocking) ─────────────────────────────────
+enum PendingAction { NONE, PENDING_TOGGLE, PENDING_DELETE };
+PendingAction pendingAction = NONE;
+int pendingId = 0;
+
 // ─── Screen Layout (135x240 portrait) ────────────────────────────────────
 // The StickS3 is rotated so the 240-wide dimension is horizontal.
 // We use the full 240x135 in landscape mode.
@@ -33,15 +38,16 @@ bool wifiConnected = false;
 // Layout:
 //   0-16   → Status bar (WiFi icon, battery bar)
 //   18-30  → Large "Today" header
-//   38-102 → Task list (4 rows of ~16px each)
-//   105-113 → Progress bar
-//   115-135 → Progress text
+//   38-91  → Task list (3 rows of ~17px each)
+//   96-104 → Progress bar
+//   110-135 → Progress text
 
 #define STATUS_BAR_Y   0
 #define HEADER_Y       18
 #define LIST_START_Y   40
-#define LIST_ROW_H     16
-#define PROGRESS_BAR_Y 103
+#define LIST_ROW_H     17
+// Progress bar
+#define PROGRESS_BAR_Y 96
 
 // ─── Fonts ───────────────────────────────────────────────────────────────
 // Use larger fonts for readability
@@ -109,7 +115,7 @@ void loop() {
   if (M5.BtnA.wasPressed()) {
     if (currentIndex < taskCount - 1) {
       currentIndex++;
-      int maxVisible = 4;
+      int maxVisible = 3;
       if (currentIndex - scrollOffset >= maxVisible) {
         scrollOffset = currentIndex - maxVisible + 1;
       }
@@ -130,7 +136,8 @@ void loop() {
       if (currentIndex >= taskCount) currentIndex = max(0, taskCount - 1);
       drawScreen();
       // Then fire the HTTP call in the background
-      deleteTask(id);
+      pendingAction = PENDING_DELETE;
+      pendingId = id;
     }
   }
 
@@ -142,7 +149,8 @@ void loop() {
       doneCount += taskList[currentIndex].done ? 1 : -1;
       drawScreen();
       // Then fire the HTTP call in the background
-      toggleTask(taskList[currentIndex].id);
+      pendingAction = PENDING_TOGGLE;
+      pendingId = taskList[currentIndex].id;
     }
   }
   if (M5.BtnB.wasHold()) {
@@ -153,7 +161,7 @@ void loop() {
       }
     } else {
       currentIndex = taskCount - 1;
-      scrollOffset = taskCount - 4;
+      scrollOffset = taskCount - 3;
       if (scrollOffset < 0) scrollOffset = 0;
     }
     drawScreen();
@@ -165,6 +173,15 @@ void loop() {
     if (wifiConnected) fetchTasks();
     drawScreen();
     lastFetch = millis();
+  }
+
+  // Process pending HTTP action (non-blocking — runs after loop has polled buttons)
+  if (pendingAction == PENDING_TOGGLE) {
+    toggleTask(pendingId);
+    pendingAction = NONE;
+  } else if (pendingAction == PENDING_DELETE) {
+    deleteTask(pendingId);
+    pendingAction = NONE;
   }
 }
 
@@ -199,7 +216,7 @@ void fetchTasks() {
 
       if (currentIndex >= taskCount) {
         currentIndex = max(0, taskCount - 1);
-        scrollOffset = max(0, currentIndex - 3);
+        scrollOffset = max(0, currentIndex - 2);
       }
     }
   }
@@ -231,17 +248,18 @@ void deleteTask(int id) {
 void drawScreen() {
   M5.Lcd.fillScreen(BG_COLOR);
 
-  drawStatusBar();
-
-  // Header
+  // Header — draw this FIRST so it goes under the status bar
   M5.Lcd.setFont(FONT_LARGE);
   M5.Lcd.setTextColor(TEXT_PRIMARY);
   M5.Lcd.setCursor(10, HEADER_Y);
   M5.Lcd.println("Today");
 
+  // Status bar — draw AFTER header so it overwrites any font overflow
+  drawStatusBar();
+
   // Task list
   M5.Lcd.setFont(FONT_SMALL);
-  int visible = 4;
+  int visible = 3;
 
   if (taskCount == 0) {
     // Empty state
@@ -356,10 +374,10 @@ void drawProgressBar() {
   }
 
   // Text
-  M5.Lcd.setFont(FONT_TINY);
+  M5.Lcd.setFont(&fonts::Font0);
   M5.Lcd.setTextColor(TEXT_SECONDARY);
   M5.Lcd.setCursor(10, PROGRESS_BAR_Y + 14);
   M5.Lcd.printf("%d/%d done", doneCount, taskCount);
-  // Clear any leftover text below the progress line
-  M5.Lcd.fillRect(0, PROGRESS_BAR_Y + 24, 240, 15, BG_COLOR);
+  // Clear any leftover text below
+  M5.Lcd.fillRect(0, PROGRESS_BAR_Y + 24, 240, 20, BG_COLOR);
 }
