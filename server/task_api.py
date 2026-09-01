@@ -73,6 +73,14 @@ def toggle_task(task_id):
         return jsonify(dict(task))
     return jsonify({"error": "not found"}), 404
 
+@app.route("/api/tasks/<int:task_id>", methods=["DELETE"])
+def delete_task(task_id):
+    conn = get_db()
+    conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
 # ─── Web UI ───────────────────────────────────────────────────────────────
 
 HTML_PAGE = """<!DOCTYPE html>
@@ -110,11 +118,16 @@ async function loadTasks() {
     <div class="task-row">
       <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggle(${t.id})">
       <span class="${t.done ? 'task-done' : ''}">${t.title}</span>
+      <button onclick="del(${t.id})" style="margin-left:auto;background:#d32f2f;padding:2px 8px;font-size:0.8em">x</button>
     </div>
   `).join('');
 }
 async function toggle(id) {
   await fetch('/api/tasks/' + id + '/toggle', { method: 'POST' });
+  loadTasks();
+}
+async function del(id) {
+  await fetch('/api/tasks/' + id, { method: 'DELETE' });
   loadTasks();
 }
 document.getElementById('addForm').onsubmit = async (e) => {

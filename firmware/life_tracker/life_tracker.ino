@@ -111,7 +111,7 @@ void setup() {
 void loop() {
   M5.update();
 
-  // Button A: scroll down
+  // Button A: short = scroll down, long = delete current task
   if (M5.BtnA.wasPressed()) {
     if (currentIndex < taskCount - 1) {
       currentIndex++;
@@ -124,6 +124,14 @@ void loop() {
       scrollOffset = 0;
     }
     drawScreen();
+  }
+  if (M5.BtnA.wasHold()) {
+    if (taskCount > 0 && currentIndex < taskCount) {
+      deleteTask(taskList[currentIndex].id);
+      delay(200);
+      fetchTasks();
+      drawScreen();
+    }
   }
 
   // Button B: tap = toggle, hold = scroll up
@@ -223,6 +231,19 @@ void toggleTask(int id) {
   http.end();
 }
 
+void deleteTask(int id) {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  HTTPClient http;
+  // For Render (cloud): use HTTPS, no port
+  String url = String("https://") + SERVER_HOST + "/api/tasks/" + id;
+
+  http.begin(url);
+  http.setTimeout(5000);
+  http.sendRequest("DELETE", "");
+  http.end();
+}
+
 // ─── Display ─────────────────────────────────────────────────────────────
 
 void drawScreen() {
@@ -293,8 +314,8 @@ void drawScreen() {
     M5.Lcd.setCursor(10, STATUS_Y);
     M5.Lcd.printf("%d/%d  A:v", doneCount, taskCount);
     M5.Lcd.setTextColor(TFT_DARKGREY);
-    M5.Lcd.setCursor(90, STATUS_Y);
-    M5.Lcd.print("B:tap=x hold=^");
+    M5.Lcd.setCursor(85, STATUS_Y);
+    M5.Lcd.print("Ahold=del");
   } else {
     M5.Lcd.setTextColor(TFT_RED);
     M5.Lcd.setCursor(10, STATUS_Y);
