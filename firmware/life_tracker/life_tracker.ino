@@ -188,7 +188,8 @@ void loop() {
       screenMode = (screenMode == MODE_TASKS) ? MODE_STATS : MODE_TASKS;
       rotationAngle = 0.0;
       // Set the display rotation to match
-      M5.Lcd.setRotation(screenMode == MODE_STATS ? 3 : 1);
+      // Rotation 0 = portrait (USB down), 1 = landscape (USB right, normal task view)
+      M5.Lcd.setRotation(screenMode == MODE_STATS ? 0 : 1);
       drawScreen();
     }
   } else {
