@@ -186,15 +186,12 @@ void loop() {
   }
 
   // ── Orientation — Accelerometer Based ────────────────────────────────
-  // Detect if device is held vertically (portrait)
   static ScreenMode lastScreenMode = MODE_TASKS;
   ScreenMode newMode = MODE_TASKS;
   
-  // When held vertically, gravity is on the Y axis (up/down)
-  // When flat on desk, gravity is on Z axis
-  // When on its side, gravity is on X axis
-  // Only switch to stats when Y gravity > 0.7G (device is clearly vertical)
-  if (fabs(ay) > 0.7 && fabs(ay) > fabs(ax) && fabs(ay) > fabs(az) * 0.5) {
+  // X = 1.0 when vertical (upright), Y = 1.0 on side, Z = 1.0 flat on back
+  // Only switch to stats when vertical (X gravity dominant)
+  if (fabs(ax) > 0.7 && fabs(ax) > fabs(ay) && fabs(ax) > fabs(az) * 0.5) {
     newMode = MODE_STATS;
   } else {
     newMode = MODE_TASKS;
