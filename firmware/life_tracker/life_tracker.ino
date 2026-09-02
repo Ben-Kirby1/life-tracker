@@ -319,19 +319,23 @@ void loop() {
     return;
   }
 
-  // ── Periodic refresh ──────────────────────────────────────────────────
+  // ── Periodic refresh (only when screen awake) ──────────────────────────
   static unsigned long lastFetch = 0;
-  if (millis() - lastFetch > 5000) {
-    if (wifiConnected) fetchTasks();
-    drawScreen();
-    lastFetch = millis();
+  if (screenAwake) {
+    if (millis() - lastFetch > 5000) {
+      if (wifiConnected) fetchTasks();
+      drawScreen();
+      lastFetch = millis();
+    }
+  } else {
+    lastFetch = millis();  // reset timer so it doesn't fire immediately on wake
   }
 
-  // ── Fire deferred HTTP ────────────────────────────────────────────────
-  if (pendingAction == PENDING_TOGGLE) {
+  // ── Fire deferred HTTP (only when awake) ───────────────────────────────
+  if (screenAwake && pendingAction == PENDING_TOGGLE) {
     toggleTask(pendingId);
     pendingAction = NONE;
-  } else if (pendingAction == PENDING_DELETE) {
+  } else if (screenAwake && pendingAction == PENDING_DELETE) {
     deleteTask(pendingId);
     pendingAction = NONE;
   }
