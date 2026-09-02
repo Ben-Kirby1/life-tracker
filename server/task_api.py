@@ -152,6 +152,5 @@ def index():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print(f"Life Tracker server starting on port {port}...")
-    print(f"  API:     /api/tasks")
-    print("  Press Ctrl+C to stop")
+    print(f"  Web UI:  https://{os.environ.get('PA_USER', 'localhost')}.pythonanywhere.com")
     app.run(host="0.0.0.0", port=port, debug=True)
