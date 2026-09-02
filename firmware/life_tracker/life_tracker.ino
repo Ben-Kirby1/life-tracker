@@ -300,7 +300,7 @@ void loop() {
 
   // ── Periodic refresh ──────────────────────────────────────────────────
   static unsigned long lastFetch = 0;
-  if (millis() - lastFetch > 30000) {
+  if (millis() - lastFetch > 5000) {
     if (wifiConnected) fetchTasks();
     drawScreen();
     lastFetch = millis();
