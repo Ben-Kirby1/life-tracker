@@ -185,30 +185,31 @@ void loop() {
     return;
   }
 
-  // ── Orientation — Gyro-Based Rotation ────────────────────────────────
-  // Integrate gyro Z-axis to track cumulative rotation angle
-  // gz is in degrees per second, multiply by dt for degrees
-  if (fabs(gz) > GYRO_DEADBAND) {
-    unsigned long now = millis();
-    if (lastGyroTime > 0) {
-      float dt = (now - lastGyroTime) / 1000.0;  // seconds
-      rotationAngle += gz * dt;
-    }
-    lastGyroTime = now;
-
-    // If we've rotated past the threshold, toggle mode
-    if (fabs(rotationAngle) > ROTATION_THRESHOLD) {
-      screenMode = (screenMode == MODE_TASKS) ? MODE_STATS : MODE_TASKS;
-      rotationAngle = 0.0;
-      // Set the display rotation to match
-      // Rotation 0 = portrait (USB down), 1 = landscape (USB right, normal task view)
-      M5.Lcd.setRotation(screenMode == MODE_STATS ? 0 : 1);
-      drawScreen();
-    }
+  // ── Orientation — Accelerometer Based ────────────────────────────────
+  // Detect which axis gravity is mostly on
+  static ScreenMode lastScreenMode = MODE_TASKS;
+  ScreenMode newMode = MODE_TASKS;
+  
+  // When flat on desk, Z has gravity (~1G). When rotated sideways, X or Y has gravity.
+  // Prefer the axis with the strongest absolute value
+  if (fabs(ax) > fabs(ay) && fabs(ax) > fabs(az) && fabs(ax) > 0.4) {
+    newMode = MODE_STATS;
+  } else if (fabs(ay) > fabs(ax) && fabs(ay) > fabs(az) && fabs(ay) > 0.4) {
+    newMode = MODE_STATS;
   } else {
-    // Slowly decay rotation angle when still (prevents drift)
-    rotationAngle *= 0.95;
-    lastGyroTime = 0;
+    newMode = MODE_TASKS;
+  }
+  
+  // Only switch if it's been stable for a bit (debounce)
+  static unsigned long modeChangeStart = 0;
+  if (newMode != lastScreenMode) {
+    modeChangeStart = millis();
+    lastScreenMode = newMode;
+  }
+  if (newMode != screenMode && millis() - modeChangeStart > 500) {
+    screenMode = newMode;
+    M5.Lcd.setRotation(screenMode == MODE_STATS ? 0 : 1);
+    drawScreen();
   }
 
   // ── Shake Detection ───────────────────────────────────────────────────
