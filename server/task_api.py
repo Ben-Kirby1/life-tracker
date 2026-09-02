@@ -274,7 +274,7 @@ async function loadTasks() {
     return;
   }
   list.innerHTML = tasks.map(t => `
-    <div class="task-row" draggable="true" data-id="${t.id}" ondragstart="onDragStart(event)" ondragover="onDragOver(event)" ondrop="onDrop(event)" ondragend="onDragEnd(event)" ontouchstart="onTouchStart(event, ${t.id})" ontouchmove="onTouchMove(event)" ontouchend="onTouchEnd(event)">
+    <div class="task-row" draggable="true" data-id="${t.id}" ondragstart="onDragStart(event)" ondragover="onDragOver(event)" ondrop="onDrop(event)" ondragend="onDragEnd(event)">
       <span class="handle">⠿</span>
       <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggle(${t.id})">
       <span class="title ${t.done ? 'done' : ''}">${t.title}</span>
@@ -291,12 +291,12 @@ async function del(id) {
   loadTasks();
 }
 let dragId = null;
-let touchStartY = 0;
-let touchDragId = null;
 function onDragStart(e) {
-  dragId = e.target.closest('.task-row').dataset.id;
-  e.target.closest('.task-row').classList.add('dragging');
+  const row = e.target.closest('.task-row');
+  dragId = row.dataset.id;
+  row.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', dragId);
 }
 function onDragOver(e) {
   e.preventDefault();
@@ -307,24 +307,21 @@ function onDragOver(e) {
 function onDrop(e) {
   e.preventDefault();
   const target = e.target.closest('.task-row');
-  if (target && dragId) saveOrder();
+  if (target && dragId) {
+    // Move the dragged row in the DOM to the drop position
+    const list = document.getElementById('taskList');
+    const dragRow = list.querySelector(`[data-id="${dragId}"]`);
+    if (dragRow && dragRow !== target) {
+      list.insertBefore(dragRow, target.nextSibling);
+    }
+    saveOrder();
+  }
   document.querySelectorAll('.task-row').forEach(r => r.classList.remove('drag-over', 'dragging'));
   dragId = null;
 }
 function onDragEnd(e) {
   document.querySelectorAll('.task-row').forEach(r => r.classList.remove('drag-over', 'dragging'));
   dragId = null;
-}
-function onTouchStart(e, id) {
-  touchStartY = e.touches[0].clientY;
-  touchDragId = id;
-}
-function onTouchMove(e) {
-  e.preventDefault();
-}
-function onTouchEnd(e) {
-  if (touchDragId) saveOrder();
-  touchDragId = null;
 }
 async function saveOrder() {
   const rows = document.querySelectorAll('.task-row');
