@@ -10,7 +10,7 @@
 
 const char* WIFI_SSID = "University House Midtown";
 const char* WIFI_PASS = "Cat-Lime~Ragdoll";
-const char* SERVER_HOST = "life-tracker-server-ipri.onrender.com";
+const char* SERVER_HOST = "bkirby13.pythonanywhere.com";
 
 // ══════════════════════════════════════════════════════════════════════════
 //  TASK DATA

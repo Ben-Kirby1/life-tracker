@@ -1,0 +1,18 @@
+# Create the server directory and files in PythonAnywhere
+
+mkdir -p life-tracker/server
+cd life-tracker/server
+
+# Download the two files directly via raw.githubusercontent.com (may work for private)
+# Or use PythonAnywhere's web interface:
+# 1. Go to the Files tab
+# 2. Navigate to life-tracker/server/
+# 3. Create files from the GitHub content
+
+# Instead, let's create the files via the bash console using Python to fetch
+python3 << 'EOF'
+import urllib.request, json
+# GitHub API requires auth for private repos
+# Let's create the files manually
+print("Creating files manually - go to the Files tab instead")
+EOF
