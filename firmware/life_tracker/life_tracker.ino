@@ -59,23 +59,26 @@ int pendingId = 0;
 // Screen modes
 enum ScreenMode { MODE_TASKS, MODE_STATS };
 ScreenMode screenMode = MODE_TASKS;
-bool modeChanged = false;
 
 // Pick-up wake
 bool screenAwake = true;
 unsigned long lastMotionTime = 0;
-const unsigned long SLEEP_TIMEOUT = 10000;  // 10s of stillness = sleep
+const unsigned long SLEEP_TIMEOUT = 10000;
 
 // Shake to clear
 bool shakeConfirmPending = false;
 unsigned long shakeConfirmStart = 0;
 const unsigned long SHAKE_CONFIRM_TIMEOUT = 3000;
 
-// IMU calibration
-float stillThreshold = 0.15;    // G - below this = still
-float pickUpThreshold = 0.5;    // G - above this = being picked up
-float shakeThreshold = 2.8;     // G - above this = shake peak
-float orientationThreshold = 0.6; // G - above this = gravity in that axis
+// Gyro-based rotation detection
+float rotationAngle = 0.0;          // cumulative rotation around Z axis
+unsigned long lastGyroTime = 0;
+const float ROTATION_THRESHOLD = 90.0;  // degrees to trigger mode switch
+const float GYRO_DEADBAND = 10.0;       // deg/s — ignore tiny movements
+
+// Stillness detection
+const float STILL_THRESHOLD = 0.15;  // G deviation from 1.0G
+const float SHAKE_THRESHOLD = 2.8;   // G peak for shake
 
 // ══════════════════════════════════════════════════════════════════════════
 //  SETUP
@@ -138,11 +141,13 @@ void loop() {
   // ── Read IMU ──────────────────────────────────────────────────────────
   M5.Imu.update();
   float ax, ay, az;
+  float gx, gy, gz;
   M5.Imu.getAccel(&ax, &ay, &az);
-  float mag = sqrt(ax*ax + ay*ay + az*az);  // total acceleration magnitude
+  M5.Imu.getGyro(&gx, &gy, &gz);
+  float mag = sqrt(ax*ax + ay*ay + az*az);
 
   // ── Pick-up Wake ──────────────────────────────────────────────────────
-  bool isStill = (mag > 1.0 - stillThreshold && mag < 1.0 + stillThreshold);
+  bool isStill = (mag > 1.0 - STILL_THRESHOLD && mag < 1.0 + STILL_THRESHOLD);
 
   if (isStill) {
     // Device is sitting still — track how long
@@ -167,17 +172,29 @@ void loop() {
     return;
   }
 
-  // ── Orientation View ──────────────────────────────────────────────────
-  ScreenMode newMode = MODE_TASKS;
-  if (fabs(ax) > fabs(ay) && fabs(ax) > fabs(az)) {
-    // Gravity is mostly on X axis — device is rotated sideways
-    newMode = MODE_STATS;
+  // ── Orientation — Gyro-Based Rotation ────────────────────────────────
+  // Integrate gyro Z-axis to track cumulative rotation angle
+  // gz is in degrees per second, multiply by dt for degrees
+  if (fabs(gz) > GYRO_DEADBAND) {
+    unsigned long now = millis();
+    if (lastGyroTime > 0) {
+      float dt = (now - lastGyroTime) / 1000.0;  // seconds
+      rotationAngle += gz * dt;
+    }
+    lastGyroTime = now;
+
+    // If we've rotated past the threshold, toggle mode
+    if (fabs(rotationAngle) > ROTATION_THRESHOLD) {
+      screenMode = (screenMode == MODE_TASKS) ? MODE_STATS : MODE_TASKS;
+      rotationAngle = 0.0;
+      // Set the display rotation to match
+      M5.Lcd.setRotation(screenMode == MODE_STATS ? 3 : 1);
+      drawScreen();
+    }
   } else {
-    newMode = MODE_TASKS;
-  }
-  if (newMode != screenMode) {
-    screenMode = newMode;
-    modeChanged = true;
+    // Slowly decay rotation angle when still (prevents drift)
+    rotationAngle *= 0.95;
+    lastGyroTime = 0;
   }
 
   // ── Shake Detection ───────────────────────────────────────────────────
@@ -185,7 +202,7 @@ void loop() {
   static int shakePeakCount = 0;
   static unsigned long shakeWindowStart = 0;
 
-  if (mag > shakeThreshold) {
+  if (mag > SHAKE_THRESHOLD) {
     unsigned long now = millis();
     if (now - shakeWindowStart > 1000) {
       // Reset window
@@ -461,72 +478,59 @@ void drawTasksView() {
 // ══════════════════════════════════════════════════════════════════════════
 
 void drawStatsView() {
-  drawStatusBar();
-
-  M5.Lcd.setFont(&fonts::FreeSans12pt7b);
+  // In rotated mode (135x240 tall), use smaller fonts
+  M5.Lcd.setFont(&fonts::Font0);
+  M5.Lcd.setTextSize(2);
   M5.Lcd.setTextColor(TFT_WHITE);
-  M5.Lcd.setCursor(10, HEADER_Y);
+  M5.Lcd.setCursor(10, 10);
   M5.Lcd.println("Stats");
 
-  M5.Lcd.setFont(&fonts::FreeSans9pt7b);
+  M5.Lcd.setTextSize(1);
 
-  // Task completion rate
   int done = countDone();
   int total = taskCount;
   int pct = total > 0 ? done * 100 / total : 0;
 
   M5.Lcd.setTextColor(TFT_WHITE);
   M5.Lcd.setCursor(10, 40);
-  M5.Lcd.print("Tasks:");
+  M5.Lcd.print("Tasks: ");
   M5.Lcd.setTextColor(GREEN);
-  M5.Lcd.setCursor(80, 40);
   M5.Lcd.printf("%d/%d", done, total);
 
-  M5.Lcd.setTextColor(GRAY);
-  M5.Lcd.setCursor(10, 58);
-  M5.Lcd.print("Rate:");
+  M5.Lcd.setTextColor(TFT_WHITE);
+  M5.Lcd.setCursor(10, 60);
+  M5.Lcd.print("Rate:  ");
   M5.Lcd.setTextColor(pct >= 50 ? GREEN : GRAY);
-  M5.Lcd.setCursor(80, 58);
   M5.Lcd.printf("%d%%", pct);
 
-  // Battery
   int vol_per = M5.Power.getBatteryLevel();
   bool charging = M5.Power.isCharging();
   M5.Lcd.setTextColor(TFT_WHITE);
-  M5.Lcd.setCursor(10, 76);
-  M5.Lcd.print("Battery:");
+  M5.Lcd.setCursor(10, 80);
+  M5.Lcd.print("Batt:  ");
   M5.Lcd.setTextColor(vol_per > 20 ? GREEN : TFT_RED);
-  M5.Lcd.setCursor(80, 76);
   M5.Lcd.printf("%d%%", vol_per);
   if (charging) {
     M5.Lcd.setTextColor(GREEN);
-    M5.Lcd.setCursor(130, 76);
-    M5.Lcd.print("CHG");
+    M5.Lcd.print(" CHG");
   }
 
-  // Big progress circle representation
-  drawPieChart(pct);
-}
-
-void drawPieChart(int pct) {
-  // Draw a simple arc/progress indicator
-  int cx = 120, cy = 110, r = 18;
-  M5.Lcd.drawCircle(cx, cy, r, DIVIDER_COLOR);
-
-  if (pct > 0) {
-    // Draw filled arc segments (simplified: just a filled circle segment)
-    M5.Lcd.fillCircle(cx, cy, r - 2, GREEN);
-    // "Erase" the undone portion with black
-    // This is a simple approximation — for a true pie chart we'd need trigonometry
-    M5.Lcd.fillCircle(cx, cy, r - 2, BG_COLOR);
-    M5.Lcd.fillCircle(cx, cy, r - 4, pct >= 50 ? GREEN : DIM);
-  }
-
-  // Percentage text in center
-  M5.Lcd.setFont(&fonts::Font0);
-  M5.Lcd.setTextColor(TFT_WHITE);
-  M5.Lcd.setCursor(cx - 8, cy - 4);
+  // Big completion percentage
+  M5.Lcd.setTextSize(4);
+  M5.Lcd.setTextColor(pct >= 50 ? GREEN : GRAY);
+  M5.Lcd.setCursor(25, 120);
   M5.Lcd.printf("%d%%", pct);
+  M5.Lcd.setTextSize(1);
+  M5.Lcd.setTextColor(GRAY);
+  M5.Lcd.setCursor(25, 170);
+  M5.Lcd.print("complete");
+
+  // WiFi status
+  M5.Lcd.setTextColor(GRAY);
+  M5.Lcd.setCursor(10, 200);
+  M5.Lcd.print("WiFi: ");
+  M5.Lcd.setTextColor(wifiConnected ? GREEN : TFT_RED);
+  M5.Lcd.print(wifiConnected ? "OK" : "OFF");
 }
 
 // ══════════════════════════════════════════════════════════════════════════
