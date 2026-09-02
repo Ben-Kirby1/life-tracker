@@ -80,6 +80,9 @@ const float GYRO_DEADBAND = 10.0;       // deg/s — ignore tiny movements
 const float STILL_THRESHOLD = 0.15;  // G deviation from 1.0G
 const float SHAKE_THRESHOLD = 2.8;   // G peak for shake
 
+// Full title view
+bool showingFullTitle = false;
+
 // ══════════════════════════════════════════════════════════════════════════
 //  SETUP
 // ══════════════════════════════════════════════════════════════════════════
@@ -153,11 +156,21 @@ void loop() {
     // Device is sitting still — track how long
     if (screenAwake && millis() - lastMotionTime > SLEEP_TIMEOUT) {
       screenAwake = false;
-      M5.Lcd.fillScreen(BG_COLOR);  // turn off display
+      M5.Lcd.fillScreen(BG_COLOR);
       M5.Lcd.setBrightness(0);
     }
   } else {
     // Device is moving
+    lastMotionTime = millis();
+    if (!screenAwake) {
+      screenAwake = true;
+      M5.Lcd.setBrightness(10);
+      drawScreen();
+    }
+  }
+
+  // Reset sleep timer on any button press
+  if (M5.BtnA.wasPressed() || M5.BtnA.wasHold() || M5.BtnB.wasPressed() || M5.BtnB.wasHold()) {
     lastMotionTime = millis();
     if (!screenAwake) {
       screenAwake = true;
@@ -292,10 +305,20 @@ void loop() {
         scrollOffset = currentIndex;
       }
     } else if (screenMode == MODE_TASKS) {
-      currentIndex = taskCount - 1;
-      scrollOffset = max(0, taskCount - VISIBLE_TASKS);
+      // At top — show full title of current task
+      showFullTitle();
     }
     drawScreen();
+  }
+
+  // ── Full title view ──────────────────────────────────────────────────
+  if (showingFullTitle) {
+    if (M5.BtnA.wasPressed() || M5.BtnB.wasPressed() || M5.BtnA.wasHold() || M5.BtnB.wasHold()) {
+      showingFullTitle = false;
+      drawScreen();
+    }
+    delay(50);
+    return;
   }
 
   // ── Periodic refresh ──────────────────────────────────────────────────
@@ -547,6 +570,40 @@ void drawShakeConfirm() {
   M5.Lcd.setTextColor(GRAY);
   M5.Lcd.setCursor(10, 55);
   M5.Lcd.print("B: Yes    A: No");
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  FULL TITLE VIEW
+// ══════════════════════════════════════════════════════════════════════════
+
+void showFullTitle() {
+  if (taskCount == 0 || currentIndex >= taskCount) return;
+
+  showingFullTitle = true;
+
+  M5.Lcd.fillScreen(BG_COLOR);
+  M5.Lcd.setFont(&fonts::FreeSans9pt7b);
+  M5.Lcd.setTextColor(TFT_WHITE);
+
+  // Show the full title word-wrapped
+  M5.Lcd.setCursor(10, 30);
+  String title = String(taskList[currentIndex].title);
+  int lineWidth = 0;
+  int y = 30;
+  for (int i = 0; i < title.length(); i++) {
+    char c = title.charAt(i);
+    lineWidth += 8;  // approx char width
+    if (lineWidth > 220 || c == '\n') {
+      y += 16;
+      lineWidth = 0;
+      if (y > 110) break;
+    }
+    M5.Lcd.print(c);
+  }
+
+  M5.Lcd.setTextColor(GRAY);
+  M5.Lcd.setCursor(10, 120);
+  M5.Lcd.print("Press any button");
 }
 
 // ══════════════════════════════════════════════════════════════════════════
