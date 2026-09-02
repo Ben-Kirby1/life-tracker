@@ -31,6 +31,7 @@ def get_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             done INTEGER DEFAULT 0,
+            position INTEGER DEFAULT 0,
             created TEXT DEFAULT (date('now'))
         )
     """)
@@ -45,7 +46,7 @@ def get_db():
 def list_tasks():
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, title, done FROM tasks WHERE created = date('now') ORDER BY id"
+        "SELECT id, title, done FROM tasks WHERE created = date('now') ORDER BY position, id"
     ).fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
@@ -56,7 +57,9 @@ def add_task():
     if not data or not data.get("title", "").strip():
         return jsonify({"error": "title required"}), 400
     conn = get_db()
-    conn.execute("INSERT INTO tasks (title) VALUES (?)", (data["title"].strip(),))
+    # Get max position for ordering
+    max_pos = conn.execute("SELECT COALESCE(MAX(position), -1) FROM tasks WHERE created = date('now')").fetchone()[0]
+    conn.execute("INSERT INTO tasks (title, position) VALUES (?, ?)", (data["title"].strip(), max_pos + 1))
     conn.commit()
     task_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     conn.close()
@@ -77,6 +80,18 @@ def toggle_task(task_id):
 def delete_task(task_id):
     conn = get_db()
     conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/tasks/reorder", methods=["POST"])
+def reorder_tasks():
+    data = request.get_json()
+    if not data or "order" not in data:
+        return jsonify({"error": "order list required"}), 400
+    conn = get_db()
+    for i, task_id in enumerate(data["order"]):
+        conn.execute("UPDATE tasks SET position = ? WHERE id = ?", (i, task_id))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
@@ -153,6 +168,26 @@ HTML_PAGE = """<!DOCTYPE html>
     padding: 10px 0;
     border-bottom: 1px solid #1a1a1a;
     gap: 12px;
+    cursor: grab;
+    touch-action: none;
+    transition: opacity 0.15s, transform 0.15s;
+  }
+  .task-row.dragging {
+    opacity: 0.4;
+    transform: scale(0.95);
+  }
+  .task-row.drag-over {
+    border-bottom: 2px solid #007aff;
+  }
+  .task-row .handle {
+    color: #333;
+    font-size: 0.8em;
+    cursor: grab;
+    padding: 4px;
+    flex-shrink: 0;
+  }
+  .task-row .handle:hover {
+    color: #555;
   }
   .task-row input[type=checkbox] {
     appearance: none;
@@ -239,7 +274,8 @@ async function loadTasks() {
     return;
   }
   list.innerHTML = tasks.map(t => `
-    <div class="task-row">
+    <div class="task-row" draggable="true" data-id="${t.id}" ondragstart="onDragStart(event)" ondragover="onDragOver(event)" ondrop="onDrop(event)" ondragend="onDragEnd(event)" ontouchstart="onTouchStart(event, ${t.id})" ontouchmove="onTouchMove(event)" ontouchend="onTouchEnd(event)">
+      <span class="handle">⠿</span>
       <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggle(${t.id})">
       <span class="title ${t.done ? 'done' : ''}">${t.title}</span>
       <button class="del" onclick="del(${t.id})">✕</button>
@@ -252,6 +288,52 @@ async function toggle(id) {
 }
 async function del(id) {
   await fetch('/api/tasks/' + id, { method: 'DELETE' });
+  loadTasks();
+}
+let dragId = null;
+let touchStartY = 0;
+let touchDragId = null;
+function onDragStart(e) {
+  dragId = e.target.closest('.task-row').dataset.id;
+  e.target.closest('.task-row').classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+function onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const row = e.target.closest('.task-row');
+  if (row && row.dataset.id !== dragId) row.classList.add('drag-over');
+}
+function onDrop(e) {
+  e.preventDefault();
+  const target = e.target.closest('.task-row');
+  if (target && dragId) saveOrder();
+  document.querySelectorAll('.task-row').forEach(r => r.classList.remove('drag-over', 'dragging'));
+  dragId = null;
+}
+function onDragEnd(e) {
+  document.querySelectorAll('.task-row').forEach(r => r.classList.remove('drag-over', 'dragging'));
+  dragId = null;
+}
+function onTouchStart(e, id) {
+  touchStartY = e.touches[0].clientY;
+  touchDragId = id;
+}
+function onTouchMove(e) {
+  e.preventDefault();
+}
+function onTouchEnd(e) {
+  if (touchDragId) saveOrder();
+  touchDragId = null;
+}
+async function saveOrder() {
+  const rows = document.querySelectorAll('.task-row');
+  const order = Array.from(rows).map(r => parseInt(r.dataset.id));
+  await fetch('/api/tasks/reorder', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({order: order})
+  });
   loadTasks();
 }
 document.getElementById('addForm').onsubmit = async (e) => {

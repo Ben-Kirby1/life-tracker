@@ -233,12 +233,12 @@ void loop() {
   // ── Buttons ───────────────────────────────────────────────────────────
   // Shake confirm: tap B to confirm, tap A to cancel
   if (shakeConfirmPending) {
-    if (M5.BtnB.wasPressed()) {
+    if (M5.BtnB.wasClicked()) {
       // Confirm: delete all done tasks
       deleteAllDone();
       shakeConfirmPending = false;
       drawScreen();
-    } else if (M5.BtnA.wasPressed()) {
+    } else if (M5.BtnA.wasClicked()) {
       shakeConfirmPending = false;
       drawScreen();
     }
@@ -246,8 +246,8 @@ void loop() {
     return;
   }
 
-  // Button A: short = scroll down, long = delete current task
-  if (M5.BtnA.wasPressed()) {
+  // Button A: click = scroll down, hold = delete current task
+  if (M5.BtnA.wasClicked()) {
     if (screenMode == MODE_TASKS) {
       if (currentIndex < taskCount - 1) {
         currentIndex++;
@@ -275,8 +275,8 @@ void loop() {
     }
   }
 
-  // Button B: tap = toggle, hold = scroll up
-  if (M5.BtnB.wasPressed()) {
+  // Button B: click = toggle, hold = scroll up
+  if (M5.BtnB.wasClicked()) {
     if (screenMode == MODE_TASKS && taskCount > 0 && currentIndex < taskCount) {
       taskList[currentIndex].done = !taskList[currentIndex].done;
       drawScreen();
