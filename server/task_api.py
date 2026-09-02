@@ -87,38 +87,162 @@ HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Life Tracker</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, sans-serif; background: #111; color: #eee; padding: 20px; max-width: 400px; margin: auto; }
-  h1 { font-size: 1.4em; margin-bottom: 15px; }
-  .task-row { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #333; }
-  .task-row input { margin-right: 10px; }
-  .task-done { text-decoration: line-through; color: #666; }
-  form { display: flex; gap: 8px; margin-bottom: 20px; }
-  input[type=text] { flex: 1; padding: 10px; border: 1px solid #444; border-radius: 6px; background: #222; color: #eee; font-size: 1em; }
-  button { padding: 10px 16px; border: none; border-radius: 6px; background: #2196F3; color: white; font-size: 1em; cursor: pointer; }
-  button:hover { background: #1976D2; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #000;
+    color: #fff;
+    padding: 24px 20px;
+    max-width: 420px;
+    margin: auto;
+    min-height: 100vh;
+  }
+  h1 {
+    font-size: 1.6em;
+    font-weight: 700;
+    margin-bottom: 4px;
+    letter-spacing: -0.5px;
+  }
+  .subtitle {
+    color: #666;
+    font-size: 0.85em;
+    margin-bottom: 24px;
+  }
+  form {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 28px;
+  }
+  input[type=text] {
+    flex: 1;
+    padding: 14px 16px;
+    border: none;
+    border-radius: 12px;
+    background: #1a1a1a;
+    color: #fff;
+    font-size: 1em;
+    outline: none;
+  }
+  input[type=text]:focus {
+    background: #222;
+    outline: 2px solid #333;
+  }
+  input[type=text]::placeholder {
+    color: #555;
+  }
+  button {
+    padding: 14px 20px;
+    border: none;
+    border-radius: 12px;
+    background: #007aff;
+    color: white;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover { background: #0056cc; }
+  button:active { background: #004099; }
+  .task-list { }
+  .task-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #1a1a1a;
+    gap: 12px;
+  }
+  .task-row input[type=checkbox] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 22px;
+    height: 22px;
+    border: 2px solid #444;
+    border-radius: 50%;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .task-row input[type=checkbox]:checked {
+    border-color: #34c759;
+    background: #34c759;
+  }
+  .task-row input[type=checkbox]:checked::after {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 2px;
+    width: 6px;
+    height: 10px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .task-row .title {
+    flex: 1;
+    font-size: 1em;
+    color: #fff;
+    transition: color 0.15s;
+  }
+  .task-row .title.done {
+    color: #555;
+    text-decoration: line-through;
+  }
+  .task-row .del {
+    background: none;
+    border: none;
+    color: #333;
+    font-size: 1.2em;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 8px;
+    transition: all 0.15s;
+  }
+  .task-row .del:hover {
+    color: #ff3b30;
+    background: #1a0a0a;
+  }
+  .empty {
+    text-align: center;
+    padding: 60px 0;
+    color: #444;
+  }
+  .empty .icon { font-size: 3em; margin-bottom: 12px; }
+  .empty p { font-size: 0.9em; }
+  .footer {
+    margin-top: 32px;
+    text-align: center;
+    color: #222;
+    font-size: 0.75em;
+  }
 </style>
 </head>
 <body>
-<h1>📋 Life Tracker</h1>
+<h1>Tracker</h1>
+<p class="subtitle">Today's tasks</p>
 <form id="addForm">
-  <input type="text" id="taskInput" placeholder="Add a task..." autocomplete="off">
+  <input type="text" id="taskInput" placeholder="New task..." autocomplete="off">
   <button type="submit">Add</button>
 </form>
-<div id="taskList"></div>
+<div id="taskList" class="task-list"></div>
+<div class="footer">Syncs to your StickS3</div>
 <script>
 async function loadTasks() {
   const r = await fetch('/api/tasks');
   const tasks = await r.json();
   const list = document.getElementById('taskList');
+  if (tasks.length === 0) {
+    list.innerHTML = '<div class="empty"><div class="icon">📋</div><p>No tasks yet</p></div>';
+    return;
+  }
   list.innerHTML = tasks.map(t => `
     <div class="task-row">
       <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggle(${t.id})">
-      <span class="${t.done ? 'task-done' : ''}">${t.title}</span>
-      <button onclick="del(${t.id})" style="margin-left:auto;background:#d32f2f;padding:2px 8px;font-size:0.8em">x</button>
+      <span class="title ${t.done ? 'done' : ''}">${t.title}</span>
+      <button class="del" onclick="del(${t.id})">✕</button>
     </div>
   `).join('');
 }
