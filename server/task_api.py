@@ -345,6 +345,7 @@ document.getElementById('addForm').onsubmit = async (e) => {
   loadTasks();
 };
 loadTasks();
+setInterval(loadTasks, 5000);  // auto-refresh every 5s
 </script>
 </body>
 </html>"""
