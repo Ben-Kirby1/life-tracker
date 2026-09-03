@@ -14,7 +14,6 @@ Endpoints:
 import json
 import sqlite3
 import os
-from datetime import date
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
@@ -31,12 +30,9 @@ def get_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             done INTEGER DEFAULT 0,
-            position INTEGER DEFAULT 0,
-            created TEXT DEFAULT (date('now'))
+            position INTEGER DEFAULT 0
         )
     """)
-    # Clean up old tasks (keep today's)
-    conn.execute("DELETE FROM tasks WHERE created != date('now') AND done = 1")
     conn.commit()
     return conn
 
@@ -46,7 +42,7 @@ def get_db():
 def list_tasks():
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, title, done FROM tasks WHERE created = date('now') ORDER BY position, id"
+        "SELECT id, title, done FROM tasks ORDER BY position, id"
     ).fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
@@ -58,7 +54,7 @@ def add_task():
         return jsonify({"error": "title required"}), 400
     conn = get_db()
     # Get max position for ordering
-    max_pos = conn.execute("SELECT COALESCE(MAX(position), -1) FROM tasks WHERE created = date('now')").fetchone()[0]
+    max_pos = conn.execute("SELECT COALESCE(MAX(position), -1) FROM tasks").fetchone()[0]
     conn.execute("INSERT INTO tasks (title, position) VALUES (?, ?)", (data["title"].strip(), max_pos + 1))
     conn.commit()
     task_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
